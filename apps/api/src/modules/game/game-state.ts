@@ -1,0 +1,9 @@
+
+
+export enum GameState {
+  LOBBY = "LOBBY",
+  COUNTDOWN = "COUNTDOWN",
+  PLAYING = "PLAYING",
+  RESULTS = "RESULTS",
+  FINISHED = "FINISHED",
+}
