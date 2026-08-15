@@ -1,20 +1,26 @@
+import { ClientEvents } from "@blindtest/shared";
 import { ConnectedSocket, MessageBody, SubscribeMessage, WebSocketGateway, WebSocketServer } from "@nestjs/websockets";
 import { Server, Socket } from "socket.io";
+import { GameService } from "./game.service";
 
 
 
-@WebSocketGateway(
-    {
-        cors: {
-            origin: ['http://localhost:3000', 'http://192.168.1.16:3000']
-        }
-    }
-)
+@WebSocketGateway({
+    cors: {
+        origin: process.env.NODE_ENV === "production"
+            ? process.env.WEB_ORIGIN?.split(",") ?? []
+            : true,
+    },
+})
 export class GameGateway {
 
 
     @WebSocketServer()
     server: Server;
+
+    constructor(private gameService: GameService) {
+        
+    }
 
 
     @SubscribeMessage('ping')
@@ -28,6 +34,7 @@ export class GameGateway {
     }
 
 
+    //@SubscribeMessage(ClientEvents.JOIN_GAME)
     @SubscribeMessage('game:join')
     handleJoinGame(
         @MessageBody() data: {
@@ -47,6 +54,18 @@ export class GameGateway {
         .to(`game:${data.gameCode}`)
         .emit('game:player-joined', player)
         //.emit(ServerEvents.PLAYER_JOINED, player);
+    }
+
+
+    @SubscribeMessage(ClientEvents.CREATE_GAME)
+    //@SubscribeMessage('game:create')
+    handleCreateGame(
+        @ConnectedSocket() client: Socket
+    ) {
+        const code = this.gameService.createGame(client.id);
+        client.join(`game:${code}`);
+
+        client.emit('game:created', {code})
     }
 
 

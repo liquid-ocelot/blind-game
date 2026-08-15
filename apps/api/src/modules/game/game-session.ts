@@ -1,9 +1,22 @@
 import { GameState } from "./game-state";
+import { Player } from "./player";
 
 
-interface GameSession {
+export class GameSession {
   code: string;
   state: GameState;
-  //players: Player[];
+  players: Player[];
   currentRound: number;
+  masterId: string;
+
+  constructor(
+    code: string,
+    masterId:string
+  ) {
+    this.code = code;
+    this.state = GameState.LOBBY;
+    this.players = [];
+    this.currentRound = 0;
+    this.masterId = masterId;
+  }
 }
