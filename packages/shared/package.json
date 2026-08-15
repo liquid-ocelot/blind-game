@@ -6,7 +6,22 @@
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
-    ".": "./src/index.ts",
-    "./events": "./src/events/index.ts"
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.js"
+    },
+    "./events": {
+      "types": "./dist/events/index.d.ts",
+      "import": "./dist/events/index.js",
+      "require": "./dist/events/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc",
+     "dev": "tsc --watch"
+  },
+  "devDependencies": {
+    "typescript": "^5.0.0"
   }
 }

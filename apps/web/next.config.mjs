@@ -10,6 +10,7 @@ const nextConfig = {
     root: monorepoRoot,
   },
   outputFileTracingRoot: monorepoRoot,
+  allowedDevOrigins: ['192.168.1.16']
 };
 
 export default nextConfig;
