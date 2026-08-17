@@ -17,32 +17,39 @@ export const useSocketStore = create<SocketState>((set, get) => ({
   isConnected: false,
 
   connect: () => {
-    // const socket: TypedSocket = io(getSocketUrl(), {
-    //   autoConnect: false,
-    //   reconnectionAttempts: 5,
-    //   reconnectionDelay: 5000,
-    // }) as TypedSocket;
+    let { socket } = get();
+    if (socket && socket.connected) {
+      return socket;
+    }
 
-        const socket = io(getSocketUrl(), {
-      autoConnect: false,
-      reconnectionAttempts: 5,
-      reconnectionDelay: 5000,
-    });
+    if (!socket) {
+      socket = io(getSocketUrl(), {
+        autoConnect: false,
+        reconnectionAttempts: 5,
+        reconnectionDelay: 5000,
+      });
 
+      socket.onAny(m => {
+        console.log(m);
+      });
 
-    socket.on('connect', () => {
-      set({ isConnected: true });
-      console.log('Socket connected:', socket.id);
-    });
+      socket.on('connect', () => {
+        set({ isConnected: true });
+        console.log('Socket connected:', socket.id);
+      });
 
-    socket.on('disconnect', () => {
-      set({ isConnected: false });
-      console.log('Socket disconnected');
-    });
+      socket.on('disconnect', () => {
+        set({ isConnected: false });
+        console.log('Socket disconnected');
+      });
 
+      set({ socket });
+    }
 
-    set({ socket });
-    socket.connect();
+    if (!socket.connected) {
+      socket.connect();
+    }
+
     return socket;
   },
 
