@@ -3,6 +3,7 @@
 import { useEffect } from 'react';
 import { useSocketStore } from '../store/socketStore';
 import { useRouter } from 'next/navigation';
+import {useGameStore} from "@/app/store/gameStore";
 
 interface SocketProviderProps {
   children: React.ReactNode;
@@ -11,6 +12,7 @@ interface SocketProviderProps {
 export default function SocketProvider({ children }: SocketProviderProps) {
   const { connect, disconnect, socket } = useSocketStore();
   const router = useRouter();
+  const { setMasterId, setCode } = useGameStore();
 
   useEffect(() => {
     connect();
@@ -24,6 +26,9 @@ export default function SocketProvider({ children }: SocketProviderProps) {
   useEffect(() => {
     if (socket) {
       socket.on('game:created', (data: { code: string }) => {
+        setCode(data.code);
+        setMasterId(socket.id)
+
         router.push(`/room/${data.code}`);
       });
     }

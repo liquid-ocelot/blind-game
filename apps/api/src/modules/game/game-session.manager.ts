@@ -22,11 +22,22 @@ export class GameSessionManager {
     }
 
     addPlayer(code: string, player: Player) {
-        // ...
+        const game = this.getGame(code);
+        if (game) {
+            const existing = game.players.find((p) => p.id === player.id);
+            if (existing) {
+                existing.name = player.name;
+            } else {
+                game.players.push({ ...player, score: player.score ?? 0 });
+            }
+        }
     }
 
     removePlayer(code: string, playerId: string) {
-        // ...
+        const game = this.getGame(code);
+        if (game) {
+            game.players = game.players.filter((p) => p.id !== playerId);
+        }
     }
 
 
