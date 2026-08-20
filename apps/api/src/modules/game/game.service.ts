@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { GameSessionManager } from './game-session.manager';
-import { Server } from 'socket.io';
+import { Server, Socket } from 'socket.io';
 import { GameSession } from './game-session';
 import { GameState } from './game-state';
 import { ServerEvents } from '@blindtest/shared';
@@ -28,6 +28,19 @@ export class GameService {
 
     if (game != undefined) {
       this.gameLoop(game);
+    }
+  }
+
+  verifyAnswer(code: string, answer: string, client: Socket) {
+    const game = this.gameSessionManager.getGame(code);
+
+    if (game?.state != GameState.PLAYING) {
+      return;
+    }
+
+    if (answer === 'coucou') {
+      console.log("bonne réponse");
+      client.emit(ServerEvents.VALID_ANSWER, { newScore: 100 });
     }
   }
 

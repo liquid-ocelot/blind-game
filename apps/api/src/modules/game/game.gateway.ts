@@ -61,7 +61,9 @@ export class GameGateway implements OnGatewayInit {
 
     this.gameSessionManager.addPlayer(data.gameCode, player);
 
-    this.server.to(`game:${data.gameCode}`).emit(ServerEvents.PLAYER_JOINED, player);
+    this.server
+      .to(`game:${data.gameCode}`)
+      .emit(ServerEvents.PLAYER_JOINED, player);
   }
 
   @SubscribeMessage(ClientEvents.CREATE_GAME)
@@ -75,11 +77,22 @@ export class GameGateway implements OnGatewayInit {
   @SubscribeMessage(ClientEvents.START_GAME)
   handleStartGame(
     @MessageBody() data: { gameCode: string },
-    @ConnectedSocket() client: Socket,
   ) {
     const code = data?.gameCode;
     if (code) {
       this.gameService.startGame(code);
+    }
+  }
+
+  @SubscribeMessage(ClientEvents.ANSWER)
+  handleAnswer(
+    @MessageBody() data: { gameCode: string; answer: string },
+    @ConnectedSocket() client: Socket,
+  ) {
+    const code = data?.gameCode;
+    console.log(`received answer ${data.answer} for room ${data.gameCode}`)
+    if (code) {
+      this.gameService.verifyAnswer(code, data.answer, client);
     }
   }
 }

@@ -3,17 +3,25 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useSocketStore } from '../store/socketStore';
+import { useGameStore } from '../store/gameStore';
+import { ClientEvents } from '@blindtest/shared';
 
 export default function JoinPage() {
   const [playerName, setPlayerName] = useState('');
   const [gameCode, setGameCode] = useState('');
   const router = useRouter();
   const { socket, isConnected } = useSocketStore();
+  const { setPlayerName: setStorePlayerName, setCode } = useGameStore();
 
   function handleJoin() {
-    if (socket && isConnected && playerName && gameCode) {
-      socket.emit('game:join', { gameCode, playerName });
-      router.push(`/room/${gameCode}`);
+    if (socket && isConnected && playerName.trim() && gameCode.trim()) {
+      const formattedCode = gameCode.trim().toUpperCase();
+      const formattedName = playerName.trim();
+
+      setStorePlayerName(formattedName);
+      setCode(formattedCode);
+      socket.emit(ClientEvents.JOIN_GAME, { gameCode: formattedCode, playerName: formattedName });
+      router.push(`/play/${formattedCode}`);
     }
   }
 

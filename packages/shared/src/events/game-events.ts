@@ -13,4 +13,6 @@ export const ServerEvents = {
   ROUND_STARTED: 'round:started',
   ROUND_ENDED: 'round:ended',
   SCORE_UPDATED: 'game:score-updated',
+  VALID_ANSWER: 'game:valid-answer',
+  INVALID_ANSWER: 'game:invalid-answer',
 } as const;
