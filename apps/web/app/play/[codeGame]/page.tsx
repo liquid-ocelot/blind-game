@@ -123,10 +123,15 @@ export default function PlayPage() {
       }
     }
 
+    function onGoodAnswer(data: {newScore : number}) {
+      console.log(data.newScore);
+    }
+
     socket.on(ServerEvents.PLAYER_JOINED, onPlayerJoined);
     socket.on(ServerEvents.GAME_STARTED, onGameStarted);
     socket.on(ServerEvents.ROUND_STARTED, onRoundStarted);
     socket.on(ServerEvents.ROUND_ENDED, onRoundEnded);
+    socket.on(ServerEvents.VALID_ANSWER, onGoodAnswer);
     socket.on('game:finished', onGameFinished);
 
     return () => {
@@ -134,6 +139,7 @@ export default function PlayPage() {
       socket.off(ServerEvents.GAME_STARTED, onGameStarted);
       socket.off(ServerEvents.ROUND_STARTED, onRoundStarted);
       socket.off(ServerEvents.ROUND_ENDED, onRoundEnded);
+      socket.off(ServerEvents.VALID_ANSWER, onGoodAnswer);
       socket.off('game:finished', onGameFinished);
     };
   }, [

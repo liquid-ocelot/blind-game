@@ -40,8 +40,20 @@ export class GameService {
 
     if (answer === 'coucou') {
       console.log("bonne réponse");
-      client.emit(ServerEvents.VALID_ANSWER, { newScore: 100 });
+      this.handleGoodAnswer(client, game)
     }
+  }
+
+  private handleGoodAnswer(client: Socket, game: GameSession) {
+    const player = game.players.find(p => p.id === client.id);
+
+    const newScore = (player?.score ?? 0) + 100;
+    if (player != null) {
+      player.score = newScore;
+    }
+    
+
+    client.emit(ServerEvents.VALID_ANSWER, { newScore });
   }
 
   private sleep(ms: number): Promise<void> {
