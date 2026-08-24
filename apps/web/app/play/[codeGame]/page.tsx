@@ -27,7 +27,8 @@ export default function PlayPage() {
     totalRounds,
     setTotalRounds,
     code,
-      setCode
+    setCode,
+    updateScore,
   } = useGameStore();
 
   const [inputName, setInputName] = useState(playerName || '');
@@ -35,6 +36,7 @@ export default function PlayPage() {
   const [answer, setAnswer] = useState('');
   const [submittedAnswer, setSubmittedAnswer] = useState<string | null>(null);
   const [timeLeft, setTimeLeft] = useState<number | null>(null);
+  const [hasAnsweredCorrectly, setHasAnsweredCorrectly] = useState(false);
 
   // Gérer la connexion directe si le pseudo n'est pas encore défini
   function handleJoinDirectly() {
@@ -104,6 +106,7 @@ export default function PlayPage() {
       setTimeLeft(data.duration || 10);
       setSubmittedAnswer(null);
       setAnswer('');
+      setHasAnsweredCorrectly(false);
     }
 
     function onRoundEnded(data: {
@@ -111,6 +114,7 @@ export default function PlayPage() {
       players: Player[];
     }) {
       setState(GameState.RESULTS);
+      setHasAnsweredCorrectly(false);
       if (data?.players) {
         setPlayers(data.players);
       }
@@ -118,6 +122,7 @@ export default function PlayPage() {
 
     function onGameFinished(data: { players: Player[] }) {
       setState(GameState.FINISHED);
+      setHasAnsweredCorrectly(false);
       if (data?.players) {
         setPlayers(data.players);
       }
@@ -125,6 +130,10 @@ export default function PlayPage() {
 
     function onGoodAnswer(data: {newScore : number}) {
       console.log(data.newScore);
+      setHasAnsweredCorrectly(true);
+      if (socket?.id) {
+        updateScore(socket.id, data.newScore);
+      }
     }
 
     socket.on(ServerEvents.PLAYER_JOINED, onPlayerJoined);
@@ -150,6 +159,7 @@ export default function PlayPage() {
     setTotalRounds,
     setPlayers,
     addPlayer,
+    updateScore,
   ]);
 
   // Trouver le joueur courant pour afficher son score
@@ -295,43 +305,61 @@ export default function PlayPage() {
               )}
             </div>
 
-            <form onSubmit={handleSendAnswer} className="flex flex-col gap-4">
-              <div className="flex flex-col gap-2">
-                <label
-                  htmlFor="answerInput"
-                  className="text-sm font-medium text-zinc-700 dark:text-zinc-300"
-                >
-                  Votre réponse (Titre / Artiste)
-                </label>
-                <input
-                  id="answerInput"
-                  type="text"
-                  value={answer}
-                  onChange={(e) => setAnswer(e.target.value)}
-                  placeholder="Écrivez votre réponse ici..."
-                  autoFocus
-                  className="px-4 py-3 border border-zinc-300 dark:border-zinc-700 rounded-lg bg-transparent focus:outline-none focus:ring-2 focus:ring-indigo-500 text-zinc-900 dark:text-white text-lg"
-                />
+            {hasAnsweredCorrectly ? (
+              <div className="flex flex-col items-center justify-center p-6 bg-green-50 dark:bg-green-950/40 border border-green-200 dark:border-green-800 rounded-xl text-center gap-3">
+                <div className="w-12 h-12 rounded-full bg-green-100 dark:bg-green-900/50 flex items-center justify-center text-green-600 dark:text-green-400 text-2xl font-bold">
+                  ✓
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold text-green-800 dark:text-green-300">
+                    Bonne réponse !
+                  </h3>
+                  <p className="text-sm text-green-600 dark:text-green-400 mt-1">
+                    En attente de la fin de la manche...
+                  </p>
+                </div>
               </div>
+            ) : (
+              <>
+                <form onSubmit={handleSendAnswer} className="flex flex-col gap-4">
+                  <div className="flex flex-col gap-2">
+                    <label
+                      htmlFor="answerInput"
+                      className="text-sm font-medium text-zinc-700 dark:text-zinc-300"
+                    >
+                      Votre réponse (Titre / Artiste)
+                    </label>
+                    <input
+                      id="answerInput"
+                      type="text"
+                      value={answer}
+                      onChange={(e) => setAnswer(e.target.value)}
+                      placeholder="Écrivez votre réponse ici..."
+                      autoFocus
+                      className="px-4 py-3 border border-zinc-300 dark:border-zinc-700 rounded-lg bg-transparent focus:outline-none focus:ring-2 focus:ring-indigo-500 text-zinc-900 dark:text-white text-lg"
+                    />
+                  </div>
 
-              <button
-                type="submit"
-                disabled={!answer.trim()}
-                className="w-full rounded-lg bg-indigo-600 px-6 py-3 text-white font-semibold shadow-md hover:bg-indigo-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer text-lg"
-              >
-                Valider
-              </button>
-            </form>
+                  <button
+                    type="submit"
+                    disabled={!answer.trim()}
+                    className="w-full rounded-lg bg-indigo-600 px-6 py-3 text-white font-semibold shadow-md hover:bg-indigo-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer text-lg"
+                  >
+                    Valider
+                  </button>
+                </form>
 
-            {submittedAnswer && (
-              <div className="p-3 bg-indigo-50 dark:bg-indigo-950/50 border border-indigo-200 dark:border-indigo-900 rounded-lg text-center">
-                <span className="text-xs text-indigo-600 dark:text-indigo-400 block font-medium">
-                  Dernière réponse envoyée :
-                </span>
-                <span className="text-zinc-900 dark:text-white font-semibold">
-                  &quot;{submittedAnswer}&quot;
-                </span>
-              </div>
+                {submittedAnswer && (
+                  <div className="p-3 bg-indigo-50 dark:bg-indigo-950/50 border border-indigo-200 dark:border-indigo-900 rounded-lg text-center">
+                    <span className="text-xs text-indigo-600 dark:text-indigo-400 block font-medium">
+                      Dernière réponse envoyée :
+                    </span>
+                    <span className="text-zinc-900 dark:text-white font-semibold">
+                      &quot;{submittedAnswer}&quot;
+                    </span>
+                  </div>
+                )}
+              </>
             )}
           </div>
         )}
