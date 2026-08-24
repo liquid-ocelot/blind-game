@@ -4,12 +4,16 @@ import { Server, Socket } from 'socket.io';
 import { GameSession } from './game-session';
 import { GameState } from './game-state';
 import { ServerEvents } from '@blindtest/shared';
+import { MusicService } from './music.service';
 
 @Injectable()
 export class GameService {
   server: Server;
 
-  constructor(private gameSessionManager: GameSessionManager) {}
+  constructor(
+    private gameSessionManager: GameSessionManager,
+    private musicService: MusicService,
+  ) {}
 
   setServer(server: Server) {
     this.server = server;
@@ -38,9 +42,18 @@ export class GameService {
       return;
     }
 
-    if (answer === 'coucou') {
+    const tracks = this.musicService.getAvailableTracks();
+    const currentTrack = tracks.length > 0 ? tracks[(game.currentRound - 1) % tracks.length] : undefined;
+    const cleanAnswer = answer.toLowerCase().trim();
+    const isCoucou = cleanAnswer === 'coucou';
+    const isTrackMatch = currentTrack && cleanAnswer.length > 0 && (
+      currentTrack.title.toLowerCase().includes(cleanAnswer) ||
+      cleanAnswer.includes(currentTrack.title.toLowerCase())
+    );
+
+    if (isCoucou || isTrackMatch) {
       console.log("bonne réponse");
-      this.handleGoodAnswer(client, game)
+      this.handleGoodAnswer(client, game);
     }
   }
 
@@ -67,12 +80,14 @@ export class GameService {
 
     const room = `game:${game.code}`;
     const totalRounds = game.totalRounds || 5;
+    const tracks = this.musicService.getAvailableTracks();
 
     // 1. Début du compte à rebours avant la partie
     game.state = GameState.COUNTDOWN;
     this.server?.to(room).emit(ServerEvents.GAME_STARTED, {
       code: game.code,
       totalRounds,
+      tracks,
     });
 
     await this.sleep(3000);
@@ -85,21 +100,25 @@ export class GameService {
 
       game.currentRound = round;
       game.state = GameState.PLAYING;
+      const track = tracks.length > 0 ? tracks[(round - 1) % tracks.length] : undefined;
 
       this.server?.to(room).emit(ServerEvents.ROUND_STARTED, {
         currentRound: game.currentRound,
         totalRounds,
-        duration: 10,
+        duration: 30,
+        track,
+        musicUrl: track?.url,
       });
 
       // Durée du round pour deviner
-      await this.sleep(10000);
+      await this.sleep(30000);
 
       // Affichage des résultats du round
       game.state = GameState.RESULTS;
       this.server?.to(room).emit(ServerEvents.ROUND_ENDED, {
         currentRound: game.currentRound,
         players: game.players,
+        track,
       });
 
       await this.sleep(4000);

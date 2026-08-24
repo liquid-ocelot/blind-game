@@ -26,6 +26,8 @@ export function getSocketUrl(): string {
     return "http://localhost:3001";
 }
 
+export const getApiUrl = getSocketUrl;
+
 export const socket = io(getSocketUrl(), {
     autoConnect: false,
     reconnectionAttempts: 5,

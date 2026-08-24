@@ -103,7 +103,7 @@ export default function PlayPage() {
       setState(GameState.PLAYING);
       setCurrentRound(data.currentRound);
       setTotalRounds(data.totalRounds);
-      setTimeLeft(data.duration || 10);
+      setTimeLeft(data.duration || 30);
       setSubmittedAnswer(null);
       setAnswer('');
       setHasAnsweredCorrectly(false);
