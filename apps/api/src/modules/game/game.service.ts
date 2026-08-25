@@ -43,16 +43,17 @@ export class GameService {
     }
 
     const tracks = this.musicService.getAvailableTracks();
-    const currentTrack = tracks.length > 0 ? tracks[(game.currentRound - 1) % tracks.length] : undefined;
+    const currentTrack =
+      tracks.length > 0
+        ? tracks[(game.currentRound - 1) % tracks.length]
+        : undefined;
     const cleanAnswer = answer.toLowerCase().trim();
-    const isCoucou = cleanAnswer === 'coucou';
     const isTrackMatch = currentTrack && cleanAnswer.length > 0 && (
       currentTrack.title.toLowerCase().includes(cleanAnswer) ||
       cleanAnswer.includes(currentTrack.title.toLowerCase())
     );
 
-    if (isCoucou || isTrackMatch) {
-      console.log("bonne réponse");
+    if (isTrackMatch) {
       this.handleGoodAnswer(client, game);
     }
   }
@@ -60,7 +61,11 @@ export class GameService {
   private handleGoodAnswer(client: Socket, game: GameSession) {
     const player = game.players.find(p => p.id === client.id);
 
-    const newScore = (player?.score ?? 0) + 100;
+
+    const elapsedTime = game.roundStartTime - Math.floor(Date.now() / 1000);
+    const calculatedScore = 100 - 100 * (1 / elapsedTime);
+
+    const newScore = (player?.score ?? 0) + calculatedScore;
     if (player != null) {
       player.score = newScore;
     }
@@ -109,6 +114,8 @@ export class GameService {
         track,
         musicUrl: track?.url,
       });
+
+      game.startRound();
 
       // Durée du round pour deviner
       await this.sleep(30000);

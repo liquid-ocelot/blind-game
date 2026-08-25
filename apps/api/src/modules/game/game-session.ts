@@ -8,6 +8,7 @@ export class GameSession {
   currentRound: number;
   totalRounds: number;
   masterId: string;
+  roundStartTime: number = 0;
 
   constructor(
     code: string,
@@ -20,5 +21,10 @@ export class GameSession {
     this.currentRound = 0;
     this.totalRounds = totalRounds;
     this.masterId = masterId;
+  }
+
+
+  startRound() {
+    this.roundStartTime = Math.floor(Date.now() / 1000);
   }
 }
