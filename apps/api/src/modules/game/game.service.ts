@@ -62,7 +62,7 @@ export class GameService {
     const player = game.players.find(p => p.id === client.id);
 
 
-    const elapsedTime = game.roundStartTime - Math.floor(Date.now() / 1000);
+    const elapsedTime =  Math.floor(Date.now() / 1000) - game.roundStartTime;
     const calculatedScore = 100 - 100 * (1 / elapsedTime);
 
     const newScore = (player?.score ?? 0) + calculatedScore;
