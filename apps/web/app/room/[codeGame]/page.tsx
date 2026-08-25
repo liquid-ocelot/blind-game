@@ -260,12 +260,22 @@ export default function RoomPage() {
       addPlayer(player);
     }
 
-    function onGameStarted(data: { code: string; totalRounds: number; tracks?: MusicTrack[] }) {
+    function onGameStarted(data: {
+      code: string;
+      totalRounds: number;
+      tracks?: MusicTrack[];
+      players?: Player[];
+    }) {
       setState(GameState.COUNTDOWN);
       if (data?.code) setCode(data.code);
       if (data?.totalRounds) setTotalRounds(data.totalRounds);
       if (data?.tracks && data.tracks.length > 0) {
         setTracks(data.tracks);
+      }
+      if (data?.players) {
+        setPlayers(data.players);
+      } else {
+        setPlayers((prev) => prev.map((p) => ({ ...p, score: 0 })));
       }
       stopAudio();
     }
@@ -607,6 +617,21 @@ export default function RoomPage() {
                     </li>
                   ))}
               </ul>
+            </div>
+
+            <div className="w-full max-w-md px-4 mt-2">
+              {isMasterUser ? (
+                <button
+                  onClick={handleStartGame}
+                  className="w-full rounded-xl bg-indigo-600 px-6 py-3.5 text-white font-bold text-base shadow-lg hover:bg-indigo-700 transition-all focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 cursor-pointer shadow-indigo-500/20"
+                >
+                  Relancer une nouvelle partie
+                </button>
+              ) : (
+                <p className="text-sm text-zinc-500 dark:text-zinc-400 italic text-center">
+                  En attente de l&apos;hôte pour relancer une partie...
+                </p>
+              )}
             </div>
           </div>
         )}

@@ -85,13 +85,21 @@ export default function PlayPage() {
       addPlayer(player);
     }
 
-    function onGameStarted(data: { code: string; totalRounds: number }) {
+    function onGameStarted(data: { code: string; totalRounds: number; players?: Player[] }) {
       setState(GameState.COUNTDOWN);
+      setHasAnsweredCorrectly(false);
+      setSubmittedAnswer(null);
+      setAnswer('');
       if (data?.code) {
         setCode(data.code);
       }
       if (data?.totalRounds) {
         setTotalRounds(data.totalRounds);
+      }
+      if (data?.players) {
+        setPlayers(data.players);
+      } else {
+        setPlayers((prev) => prev.map((p) => ({ ...p, score: 0 })));
       }
     }
 
@@ -476,6 +484,10 @@ export default function PlayPage() {
                   })}
               </ul>
             </div>
+
+            <p className="text-xs text-zinc-500 dark:text-zinc-400 italic">
+              En attente que l&apos;hôte relance une nouvelle partie...
+            </p>
 
             <button
               onClick={() => router.push('/')}

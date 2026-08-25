@@ -96,8 +96,12 @@ export class GameService {
   }
 
   async gameLoop(game: GameSession) {
-    if (game.state !== GameState.LOBBY) {
+    if (game.state !== GameState.LOBBY && game.state !== GameState.FINISHED) {
       return;
+    }
+
+    if (game.state === GameState.FINISHED) {
+      game.resetGame();
     }
 
     const room = `game:${game.code}`;
@@ -111,6 +115,7 @@ export class GameService {
       code: game.code,
       totalRounds,
       tracks: game.tracks,
+      players: game.players,
     });
 
     await this.sleep(3000);

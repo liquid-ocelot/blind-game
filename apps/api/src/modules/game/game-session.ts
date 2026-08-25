@@ -33,6 +33,21 @@ export class GameSession {
     this.correctPlayersForCurrentRound.clear();
   }
 
+  resetGame() {
+    this.currentRound = 0;
+    this.roundStartTime = 0;
+    this.correctPlayersForCurrentRound.clear();
+    this.tracks = [];
+    if (this.roundTimer) {
+      clearTimeout(this.roundTimer);
+      this.roundTimer = undefined;
+    }
+    this.roundResolver = undefined;
+    for (const player of this.players) {
+      player.score = 0;
+    }
+  }
+
   getCurrentTrack(): MusicTrack | undefined {
     if (this.tracks.length === 0 || this.currentRound <= 0) {
       return undefined;
