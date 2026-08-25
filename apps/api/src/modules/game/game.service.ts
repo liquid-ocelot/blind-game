@@ -38,7 +38,11 @@ export class GameService {
   verifyAnswer(code: string, answer: string, client: Socket) {
     const game = this.gameSessionManager.getGame(code);
 
-    if (game?.state != GameState.PLAYING) {
+    if (game?.state !== GameState.PLAYING) {
+      return;
+    }
+
+    if (game.hasPlayerAnsweredCorrectly(client.id)) {
       return;
     }
 
@@ -61,17 +65,25 @@ export class GameService {
   private handleGoodAnswer(client: Socket, game: GameSession) {
     const player = game.players.find(p => p.id === client.id);
 
-
-    const elapsedTime =  Math.floor(Date.now() / 1000) - game.roundStartTime;
-    const calculatedScore = 100 - 100 * (1 / elapsedTime);
+    const roundTime = 30;
+    const elapsedTime = Math.max(
+      1,
+      Math.floor(Date.now() / 1000) - game.roundStartTime,
+    );
+    const calculatedScore = Math.ceil(100 - 100 * (elapsedTime / roundTime));
 
     const newScore = (player?.score ?? 0) + calculatedScore;
     if (player != null) {
       player.score = newScore;
     }
-    
+
+    game.recordCorrectAnswer(client.id);
 
     client.emit(ServerEvents.VALID_ANSWER, { newScore });
+
+    if (game.haveAllPlayersAnswered()) {
+      game.endRoundEarly();
+    }
   }
 
   private sleep(ms: number): Promise<void> {
@@ -117,8 +129,8 @@ export class GameService {
 
       game.startRound();
 
-      // Durée du round pour deviner
-      await this.sleep(30000);
+      // Durée du round pour deviner (fin anticipée si tous les joueurs ont trouvé)
+      await game.waitForRoundEnd(30000);
 
       // Affichage des résultats du round
       game.state = GameState.RESULTS;

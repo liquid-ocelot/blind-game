@@ -1,5 +1,6 @@
 import { Injectable } from "@nestjs/common";
 import { GameSession } from "./game-session";
+import { GameState } from "./game-state";
 import { Player } from "./player";
 
 @Injectable()
@@ -37,6 +38,9 @@ export class GameSessionManager {
         const game = this.getGame(code);
         if (game) {
             game.players = game.players.filter((p) => p.id !== playerId);
+            if (game.state === GameState.PLAYING && game.haveAllPlayersAnswered()) {
+                game.endRoundEarly();
+            }
         }
     }
 
