@@ -1,5 +1,6 @@
 import { GameState } from "./game-state";
 import { Player } from "./player";
+import { MusicTrack } from "./music.service";
 
 export class GameSession {
   code: string;
@@ -10,6 +11,7 @@ export class GameSession {
   masterId: string;
   roundStartTime: number = 0;
   correctPlayersForCurrentRound: Set<string> = new Set();
+  tracks: MusicTrack[] = [];
   private roundTimer?: NodeJS.Timeout;
   private roundResolver?: () => void;
 
@@ -29,6 +31,13 @@ export class GameSession {
   startRound() {
     this.roundStartTime = Math.floor(Date.now() / 1000);
     this.correctPlayersForCurrentRound.clear();
+  }
+
+  getCurrentTrack(): MusicTrack | undefined {
+    if (this.tracks.length === 0 || this.currentRound <= 0) {
+      return undefined;
+    }
+    return this.tracks[(this.currentRound - 1) % this.tracks.length];
   }
 
   hasPlayerAnsweredCorrectly(playerId: string): boolean {

@@ -4,7 +4,7 @@ import { Server, Socket } from 'socket.io';
 import { GameSession } from './game-session';
 import { GameState } from './game-state';
 import { ServerEvents } from '@blindtest/shared';
-import { MusicService } from './music.service';
+import { MusicService, MusicTrack } from './music.service';
 
 @Injectable()
 export class GameService {
@@ -46,11 +46,7 @@ export class GameService {
       return;
     }
 
-    const tracks = this.musicService.getAvailableTracks();
-    const currentTrack =
-      tracks.length > 0
-        ? tracks[(game.currentRound - 1) % tracks.length]
-        : undefined;
+    const currentTrack = game.getCurrentTrack();
     const cleanAnswer = answer.toLowerCase().trim();
     const isTrackMatch = currentTrack && cleanAnswer.length > 0 && (
       currentTrack.title.toLowerCase().includes(cleanAnswer) ||
@@ -86,6 +82,15 @@ export class GameService {
     }
   }
 
+  private shuffleTracks(tracks: MusicTrack[]): MusicTrack[] {
+    const shuffled = [...tracks];
+    for (let i = shuffled.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+    }
+    return shuffled;
+  }
+
   private sleep(ms: number): Promise<void> {
     return new Promise((resolve) => setTimeout(resolve, ms));
   }
@@ -97,14 +102,15 @@ export class GameService {
 
     const room = `game:${game.code}`;
     const totalRounds = game.totalRounds || 5;
-    const tracks = this.musicService.getAvailableTracks();
+    const availableTracks = this.musicService.getAvailableTracks();
+    game.tracks = this.shuffleTracks(availableTracks);
 
     // 1. Début du compte à rebours avant la partie
     game.state = GameState.COUNTDOWN;
     this.server?.to(room).emit(ServerEvents.GAME_STARTED, {
       code: game.code,
       totalRounds,
-      tracks,
+      tracks: game.tracks,
     });
 
     await this.sleep(3000);
@@ -117,7 +123,7 @@ export class GameService {
 
       game.currentRound = round;
       game.state = GameState.PLAYING;
-      const track = tracks.length > 0 ? tracks[(round - 1) % tracks.length] : undefined;
+      const track = game.getCurrentTrack();
 
       this.server?.to(room).emit(ServerEvents.ROUND_STARTED, {
         currentRound: game.currentRound,
