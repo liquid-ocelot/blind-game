@@ -153,7 +153,7 @@ export class GameService {
         track,
       });
 
-      await this.sleep(4000);
+      await this.sleep(7500);
 
       // Compte à rebours intermédiaire avant la manche suivante
       if (round < totalRounds) {
