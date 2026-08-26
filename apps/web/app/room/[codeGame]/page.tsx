@@ -176,18 +176,35 @@ export default function RoomPage() {
   };
 
   // Jouer une musique donnée (utilise le Blob téléchargé si disponible ou l'URL directe)
-  const playTrack = useCallback((track: MusicTrack) => {
+  const playTrack = useCallback((track: MusicTrack, startTime: number = 0) => {
     if (!audioRef.current) return;
+    const audio = audioRef.current;
     const apiUrl = getApiUrl();
     const sourceUrl = downloadedBlobs[track.id] || (track.url.startsWith('http') ? track.url : `${apiUrl}${track.url}`);
 
-    if (audioRef.current.src !== sourceUrl) {
-      audioRef.current.src = sourceUrl;
-      audioRef.current.currentTime = 0;
+    const applyStartTime = () => {
+      if (startTime > 0) {
+        try {
+          audio.currentTime = startTime;
+        } catch (err) {
+          console.warn('Impossible de positionner le curseur audio :', err);
+        }
+      } else {
+        audio.currentTime = 0;
+      }
+    };
+
+    if (audio.src !== sourceUrl) {
+      audio.src = sourceUrl;
+      audio.addEventListener('loadedmetadata', () => {
+        applyStartTime();
+      }, { once: true });
+    } else {
+      applyStartTime();
     }
 
     setActiveTrack(track);
-    audioRef.current.play().catch((err) => {
+    audio.play().catch((err) => {
       console.warn('Autoplay bloqué ou erreur de lecture audio :', err);
     });
   }, [downloadedBlobs]);
@@ -286,6 +303,7 @@ export default function RoomPage() {
       duration: number;
       track?: MusicTrack;
       musicUrl?: string;
+      startTime?: number;
     }) {
       setState(GameState.PLAYING);
       setCurrentRound(data.currentRound);
@@ -303,7 +321,10 @@ export default function RoomPage() {
 
       if (roundTrack) {
         setActiveTrack(roundTrack);
-        playTrack(roundTrack);
+        const startTime = typeof data.startTime === 'number'
+          ? data.startTime
+          : Math.floor(Math.random() * 21) + 10;
+        playTrack(roundTrack, startTime);
       }
     }
 

@@ -129,6 +129,7 @@ export class GameService {
       game.currentRound = round;
       game.state = GameState.PLAYING;
       const track = game.getCurrentTrack();
+      const startTime = Math.floor(Math.random() * 21) + 10;
 
       this.server?.to(room).emit(ServerEvents.ROUND_STARTED, {
         currentRound: game.currentRound,
@@ -136,6 +137,7 @@ export class GameService {
         duration: 30,
         track,
         musicUrl: track?.url,
+        startTime,
       });
 
       game.startRound();
