@@ -152,11 +152,21 @@ export class GameService {
       });
 
       await this.sleep(4000);
+
+      // Compte à rebours intermédiaire avant la manche suivante
+      if (round < totalRounds) {
+        game.state = GameState.COUNTDOWN;
+        this.server?.to(room).emit(ServerEvents.ROUND_COUNTDOWN, {
+          nextRound: round + 1,
+          totalRounds,
+        });
+        await this.sleep(3000);
+      }
     }
 
     // 3. Fin de la partie
     game.state = GameState.FINISHED;
-    this.server?.to(room).emit('game:finished', {
+    this.server?.to(room).emit(ServerEvents.GAME_FINISHED, {
       players: game.players,
     });
   }

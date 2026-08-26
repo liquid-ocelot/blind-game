@@ -313,13 +313,17 @@ export default function RoomPage() {
       track?: MusicTrack;
     }) {
       setState(GameState.RESULTS);
-      stopAudio();
       if (data?.players) {
         setPlayers(data.players);
       }
       if (data?.track) {
         setActiveTrack(data.track);
       }
+    }
+
+    function onRoundCountdown() {
+      setState(GameState.COUNTDOWN);
+      stopAudio();
     }
 
     function onGameFinished(data: { players: Player[] }) {
@@ -333,15 +337,17 @@ export default function RoomPage() {
     socket.on(ServerEvents.PLAYER_JOINED, onPlayerJoined);
     socket.on(ServerEvents.GAME_STARTED, onGameStarted);
     socket.on(ServerEvents.ROUND_STARTED, onRoundStarted);
+    socket.on(ServerEvents.ROUND_COUNTDOWN, onRoundCountdown);
     socket.on(ServerEvents.ROUND_ENDED, onRoundEnded);
-    socket.on('game:finished', onGameFinished);
+    socket.on(ServerEvents.GAME_FINISHED, onGameFinished);
 
     return () => {
       socket.off(ServerEvents.PLAYER_JOINED, onPlayerJoined);
       socket.off(ServerEvents.GAME_STARTED, onGameStarted);
       socket.off(ServerEvents.ROUND_STARTED, onRoundStarted);
+      socket.off(ServerEvents.ROUND_COUNTDOWN, onRoundCountdown);
       socket.off(ServerEvents.ROUND_ENDED, onRoundEnded);
-      socket.off('game:finished', onGameFinished);
+      socket.off(ServerEvents.GAME_FINISHED, onGameFinished);
     };
   }, [
     isConnected,
