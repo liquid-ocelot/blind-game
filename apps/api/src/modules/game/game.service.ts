@@ -47,15 +47,24 @@ export class GameService {
     }
 
     const currentTrack = game.getCurrentTrack();
-    const cleanAnswer = answer.toLowerCase().trim();
+    const cleanAnswer = this.normalizeString(answer);
+    const cleanTitle = currentTrack ? this.normalizeString(currentTrack.title) : '';
     const isTrackMatch = currentTrack && cleanAnswer.length > 0 && (
-      currentTrack.title.toLowerCase().includes(cleanAnswer) ||
-      cleanAnswer.includes(currentTrack.title.toLowerCase())
+      cleanTitle.includes(cleanAnswer) ||
+      cleanAnswer.includes(cleanTitle)
     );
 
     if (isTrackMatch) {
       this.handleGoodAnswer(client, game);
     }
+  }
+
+  private normalizeString(str: string): string {
+    return (str || '')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase()
+      .trim();
   }
 
   private handleGoodAnswer(client: Socket, game: GameSession) {
