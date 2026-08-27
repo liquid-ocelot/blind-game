@@ -151,6 +151,12 @@ export default function PlayPage() {
       }
     }
 
+    function onRoomSettingsUpdated(data: { totalRounds: number }) {
+      if (data?.totalRounds) {
+        setTotalRounds(data.totalRounds);
+      }
+    }
+
     socket.on(ServerEvents.PLAYER_JOINED, onPlayerJoined);
     socket.on(ServerEvents.GAME_STARTED, onGameStarted);
     socket.on(ServerEvents.ROUND_STARTED, onRoundStarted);
@@ -158,6 +164,7 @@ export default function PlayPage() {
     socket.on(ServerEvents.ROUND_ENDED, onRoundEnded);
     socket.on(ServerEvents.VALID_ANSWER, onGoodAnswer);
     socket.on(ServerEvents.GAME_FINISHED, onGameFinished);
+    socket.on(ServerEvents.ROOM_SETTINGS_UPDATED, onRoomSettingsUpdated);
 
     return () => {
       socket.off(ServerEvents.PLAYER_JOINED, onPlayerJoined);
@@ -167,6 +174,7 @@ export default function PlayPage() {
       socket.off(ServerEvents.ROUND_ENDED, onRoundEnded);
       socket.off(ServerEvents.VALID_ANSWER, onGoodAnswer);
       socket.off(ServerEvents.GAME_FINISHED, onGameFinished);
+      socket.off(ServerEvents.ROOM_SETTINGS_UPDATED, onRoomSettingsUpdated);
     };
   }, [
     isConnected,
@@ -267,8 +275,12 @@ export default function PlayPage() {
               </p>
             </div>
 
-            <div className="w-full bg-zinc-50 dark:bg-zinc-800/50 p-4 rounded-lg border border-zinc-200 dark:border-zinc-700/50">
-              <span className="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 mb-2 block">
+            <div className="w-full bg-zinc-50 dark:bg-zinc-800/50 p-4 rounded-lg border border-zinc-200 dark:border-zinc-700/50 flex flex-col gap-3">
+              <div className="flex items-center justify-between text-xs font-semibold text-zinc-500 dark:text-zinc-400">
+                <span className="uppercase tracking-wider">Partie configurée</span>
+                <span className="text-indigo-600 dark:text-indigo-400 font-bold">{totalRounds || 5} manches</span>
+              </div>
+              <span className="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 block text-left">
                 Joueurs prêts ({players.length})
               </span>
               <div className="flex flex-wrap gap-2 justify-center">

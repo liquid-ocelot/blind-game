@@ -250,6 +250,18 @@ export default function RoomPage() {
     }
   }
 
+  // Modification du nombre de manches (réservé au maître de jeu)
+  const handleTotalRoundsChange = (newTotal: number) => {
+    const clamped = Math.max(5, Math.min(20, Math.round(newTotal)));
+    setTotalRounds(clamped);
+    if (socket && isConnected && isMasterUser) {
+      socket.emit(ClientEvents.UPDATE_SETTINGS, {
+        gameCode: codeGame,
+        totalRounds: clamped,
+      });
+    }
+  };
+
   // Chargement initial de la liste des musiques
   useEffect(() => {
     fetchMusicList();
@@ -355,12 +367,19 @@ export default function RoomPage() {
       }
     }
 
+    function onRoomSettingsUpdated(data: { totalRounds: number }) {
+      if (data?.totalRounds) {
+        setTotalRounds(data.totalRounds);
+      }
+    }
+
     socket.on(ServerEvents.PLAYER_JOINED, onPlayerJoined);
     socket.on(ServerEvents.GAME_STARTED, onGameStarted);
     socket.on(ServerEvents.ROUND_STARTED, onRoundStarted);
     socket.on(ServerEvents.ROUND_COUNTDOWN, onRoundCountdown);
     socket.on(ServerEvents.ROUND_ENDED, onRoundEnded);
     socket.on(ServerEvents.GAME_FINISHED, onGameFinished);
+    socket.on(ServerEvents.ROOM_SETTINGS_UPDATED, onRoomSettingsUpdated);
 
     return () => {
       socket.off(ServerEvents.PLAYER_JOINED, onPlayerJoined);
@@ -369,6 +388,7 @@ export default function RoomPage() {
       socket.off(ServerEvents.ROUND_COUNTDOWN, onRoundCountdown);
       socket.off(ServerEvents.ROUND_ENDED, onRoundEnded);
       socket.off(ServerEvents.GAME_FINISHED, onGameFinished);
+      socket.off(ServerEvents.ROOM_SETTINGS_UPDATED, onRoomSettingsUpdated);
     };
   }, [
     isConnected,
@@ -660,6 +680,90 @@ export default function RoomPage() {
                 </p>
               )}
             </div>
+          </div>
+        )}
+
+        {/* Section Configuration de la room (Nombre de manches) */}
+        {state === GameState.LOBBY && (
+          <div className="flex flex-col gap-4 p-5 bg-zinc-50 dark:bg-zinc-800/50 rounded-xl border border-zinc-200 dark:border-zinc-700">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+              <div>
+                <h2 className="text-base font-bold text-zinc-900 dark:text-white flex items-center gap-2">
+                  <span>⚙️</span> Configuration de la partie
+                </h2>
+                <p className="text-xs text-zinc-500 dark:text-zinc-400">
+                  {isMasterUser
+                    ? 'Choisissez le nombre de manches par partie (entre 5 et 20).'
+                    : 'Nombre de manches configuré par l’hôte pour cette partie.'}
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">
+                  Manches :
+                </span>
+                <span className="text-xl font-mono font-black text-indigo-600 dark:text-indigo-400 px-3 py-1 bg-white dark:bg-zinc-900 rounded-lg border border-zinc-200 dark:border-zinc-700 shadow-sm">
+                  {totalRounds || 5}
+                </span>
+              </div>
+            </div>
+
+            {isMasterUser && (
+              <div className="flex flex-col gap-3 pt-2 border-t border-zinc-200 dark:border-zinc-700/80">
+                <div className="flex items-center gap-4">
+                  <button
+                    type="button"
+                    onClick={() => handleTotalRoundsChange((totalRounds || 5) - 1)}
+                    disabled={(totalRounds || 5) <= 5}
+                    className="w-10 h-10 rounded-lg bg-white dark:bg-zinc-900 border border-zinc-300 dark:border-zinc-700 font-bold text-lg text-zinc-800 dark:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 disabled:opacity-40 disabled:cursor-not-allowed transition-colors shadow-sm flex items-center justify-center cursor-pointer"
+                    title="Diminuer le nombre de manches"
+                  >
+                    -
+                  </button>
+
+                  <input
+                    type="range"
+                    min="5"
+                    max="20"
+                    step="1"
+                    value={totalRounds || 5}
+                    onChange={(e) => handleTotalRoundsChange(parseInt(e.target.value, 10))}
+                    className="flex-1 accent-indigo-600 cursor-pointer h-2 bg-zinc-200 dark:bg-zinc-700 rounded-lg"
+                  />
+
+                  <button
+                    type="button"
+                    onClick={() => handleTotalRoundsChange((totalRounds || 5) + 1)}
+                    disabled={(totalRounds || 5) >= 20}
+                    className="w-10 h-10 rounded-lg bg-white dark:bg-zinc-900 border border-zinc-300 dark:border-zinc-700 font-bold text-lg text-zinc-800 dark:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 disabled:opacity-40 disabled:cursor-not-allowed transition-colors shadow-sm flex items-center justify-center cursor-pointer"
+                    title="Augmenter le nombre de manches"
+                  >
+                    +
+                  </button>
+                </div>
+
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-xs text-zinc-400">Min : 5 manches</span>
+                  <div className="flex gap-1 sm:gap-2">
+                    {[5, 10, 15, 20].map((preset) => (
+                      <button
+                        key={preset}
+                        type="button"
+                        onClick={() => handleTotalRoundsChange(preset)}
+                        className={`px-2.5 py-1 text-xs rounded-md font-medium transition-colors cursor-pointer ${
+                          (totalRounds || 5) === preset
+                            ? 'bg-indigo-600 text-white shadow-sm'
+                            : 'bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800'
+                        }`}
+                      >
+                        {preset}
+                      </button>
+                    ))}
+                  </div>
+                  <span className="text-xs text-zinc-400">Max : 20 manches</span>
+                </div>
+              </div>
+            )}
           </div>
         )}
 

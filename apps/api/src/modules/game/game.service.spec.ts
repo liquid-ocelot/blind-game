@@ -105,4 +105,46 @@ describe('GameService', () => {
       expect(game.hasPlayerAnsweredCorrectly('client-1')).toBe(false);
     });
   });
+
+  describe('updateRoomSettings and totalRounds configuration', () => {
+    it('should allow master to change rounds between 5 and 20', () => {
+      const code = sessionManager.createGame('master-1');
+      const game = sessionManager.getGame(code)!;
+      expect(game.totalRounds).toBe(5);
+
+      const updated = service.updateRoomSettings(code, { totalRounds: 12 }, 'master-1');
+      expect(updated).not.toBeNull();
+      expect(game.totalRounds).toBe(12);
+    });
+
+    it('should clamp rounds to minimum 5 and maximum 20', () => {
+      const code = sessionManager.createGame('master-1');
+      const game = sessionManager.getGame(code)!;
+
+      service.updateRoomSettings(code, { totalRounds: 2 }, 'master-1');
+      expect(game.totalRounds).toBe(5);
+
+      service.updateRoomSettings(code, { totalRounds: 25 }, 'master-1');
+      expect(game.totalRounds).toBe(20);
+    });
+
+    it('should reject updates from non-master clients', () => {
+      const code = sessionManager.createGame('master-1');
+      const game = sessionManager.getGame(code)!;
+
+      const result = service.updateRoomSettings(code, { totalRounds: 10 }, 'other-client');
+      expect(result).toBeNull();
+      expect(game.totalRounds).toBe(5);
+    });
+
+    it('should reject updates if game is not in LOBBY state', () => {
+      const code = sessionManager.createGame('master-1');
+      const game = sessionManager.getGame(code)!;
+      game.state = GameState.PLAYING;
+
+      const result = service.updateRoomSettings(code, { totalRounds: 10 }, 'master-1');
+      expect(result).toBeNull();
+      expect(game.totalRounds).toBe(5);
+    });
+  });
 });

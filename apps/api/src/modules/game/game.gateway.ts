@@ -64,6 +64,13 @@ export class GameGateway implements OnGatewayInit {
     this.server
       .to(`game:${data.gameCode}`)
       .emit(ServerEvents.PLAYER_JOINED, player);
+
+    const game = this.gameSessionManager.getGame(data.gameCode);
+    if (game) {
+      client.emit(ServerEvents.ROOM_SETTINGS_UPDATED, {
+        totalRounds: game.totalRounds,
+      });
+    }
   }
 
   @SubscribeMessage(ClientEvents.CREATE_GAME)
@@ -71,7 +78,34 @@ export class GameGateway implements OnGatewayInit {
     const code = this.gameService.createGame(client.id);
     client.join(`game:${code}`);
 
-    client.emit(ServerEvents.GAME_CREATED, { code });
+    const game = this.gameSessionManager.getGame(code);
+    client.emit(ServerEvents.GAME_CREATED, {
+      code,
+      totalRounds: game?.totalRounds ?? 5,
+    });
+  }
+
+  @SubscribeMessage(ClientEvents.UPDATE_SETTINGS)
+  handleUpdateSettings(
+    @MessageBody() data: { gameCode: string; totalRounds: number },
+    @ConnectedSocket() client: Socket,
+  ) {
+    const code = data?.gameCode;
+    if (!code) return;
+
+    const game = this.gameService.updateRoomSettings(
+      code,
+      { totalRounds: data.totalRounds },
+      client.id,
+    );
+
+    if (game) {
+      this.server
+        .to(`game:${code}`)
+        .emit(ServerEvents.ROOM_SETTINGS_UPDATED, {
+          totalRounds: game.totalRounds,
+        });
+    }
   }
 
   @SubscribeMessage(ClientEvents.START_GAME)

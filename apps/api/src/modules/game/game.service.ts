@@ -27,6 +27,29 @@ export class GameService {
     return this.gameSessionManager.getGame(code);
   }
 
+  updateRoomSettings(
+    code: string,
+    settings: { totalRounds?: number },
+    clientId: string,
+  ) {
+    const game = this.gameSessionManager.getGame(code);
+    if (!game) {
+      return null;
+    }
+    if (game.masterId !== clientId) {
+      return null;
+    }
+    if (game.state !== GameState.LOBBY) {
+      return null;
+    }
+
+    if (typeof settings.totalRounds === 'number') {
+      game.setTotalRounds(settings.totalRounds);
+    }
+
+    return game;
+  }
+
   startGame(code: string) {
     const game = this.gameSessionManager.getGame(code);
 

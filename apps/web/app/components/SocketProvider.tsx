@@ -12,7 +12,7 @@ interface SocketProviderProps {
 export default function SocketProvider({ children }: SocketProviderProps) {
   const { connect, disconnect, socket } = useSocketStore();
   const router = useRouter();
-  const { setMasterId, setCode } = useGameStore();
+  const { setMasterId, setCode, setTotalRounds } = useGameStore();
 
   useEffect(() => {
     connect();
@@ -25,9 +25,12 @@ export default function SocketProvider({ children }: SocketProviderProps) {
 
   useEffect(() => {
     if (socket) {
-      socket.on('game:created', (data: { code: string }) => {
+      socket.on('game:created', (data: { code: string; totalRounds?: number }) => {
         setCode(data.code);
-        setMasterId(socket.id)
+        if (data.totalRounds) {
+          setTotalRounds(data.totalRounds);
+        }
+        setMasterId(socket.id);
 
         router.push(`/room/${data.code}`);
       });

@@ -24,8 +24,13 @@ export class GameSession {
     this.state = GameState.LOBBY;
     this.players = [];
     this.currentRound = 0;
-    this.totalRounds = totalRounds;
+    this.totalRounds = Math.max(5, Math.min(20, Math.round(totalRounds || 5)));
     this.masterId = masterId;
+  }
+
+  setTotalRounds(rounds: number): number {
+    this.totalRounds = Math.max(5, Math.min(20, Math.round(rounds || 5)));
+    return this.totalRounds;
   }
 
   startRound() {

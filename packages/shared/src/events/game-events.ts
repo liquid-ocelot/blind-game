@@ -4,6 +4,7 @@ export const ClientEvents = {
   JOIN_GAME: 'game:join',
   START_GAME: 'game:start',
   ANSWER: 'game:answer',
+  UPDATE_SETTINGS: 'game:update-settings',
 } as const;
 
 export const ServerEvents = {
@@ -17,4 +18,5 @@ export const ServerEvents = {
   VALID_ANSWER: 'game:valid-answer',
   INVALID_ANSWER: 'game:invalid-answer',
   GAME_FINISHED: 'game:finished',
+  ROOM_SETTINGS_UPDATED: 'room:settings-updated',
 } as const;

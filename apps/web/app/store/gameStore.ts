@@ -44,7 +44,7 @@ const initialState = {
   state: GameState.LOBBY,
   players: [],
   currentRound: 0,
-  totalRounds: 0,
+  totalRounds: 5,
   masterId: null,
   playerName: null,
 };
