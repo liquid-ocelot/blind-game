@@ -73,7 +73,6 @@ export class GameService {
     const cleanAnswer = this.normalizeString(answer);
     const cleanTitle = currentTrack ? this.normalizeString(currentTrack.title) : '';
     const isTrackMatch = currentTrack && cleanAnswer.length > 0 && (
-      cleanTitle.includes(cleanAnswer) ||
       cleanAnswer.includes(cleanTitle)
     );
 
