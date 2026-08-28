@@ -49,6 +49,7 @@ export default function RoomPage() {
   const [audioCurrentTime, setAudioCurrentTime] = useState<number>(0);
   const [audioDuration, setAudioDuration] = useState<number>(0);
   const [showTitle, setShowTitle] = useState<boolean>(false);
+  const [showMusicManager, setShowMusicManager] = useState<boolean>(true);
   const [activePreviewId, setActivePreviewId] = useState<string | null>(null);
   const [timeLeft, setTimeLeft] = useState<number | null>(null);
 
@@ -782,108 +783,124 @@ export default function RoomPage() {
 
               <div className="flex items-center gap-2 w-full sm:w-auto">
                 <button
-                  onClick={downloadAllTracks}
-                  disabled={downloadProgress.isDownloading || tracks.length === 0}
-                  className="w-full sm:w-auto rounded-lg bg-indigo-600 px-4 py-2 text-white text-xs font-semibold shadow-sm hover:bg-indigo-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer flex items-center justify-center gap-2"
+                  type="button"
+                  onClick={() => setShowMusicManager((prev) => !prev)}
+                  className="px-3 py-2 rounded-lg border border-zinc-300 dark:border-zinc-700 hover:bg-zinc-100 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-300 transition-colors cursor-pointer text-xs flex items-center gap-1.5 font-medium"
                 >
-                  {downloadProgress.isDownloading ? (
-                    <>
-                      <span className="inline-block w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                      Téléchargement ({downloadProgress.current}/{downloadProgress.total})...
-                    </>
-                  ) : downloadedCount === tracks.length && tracks.length > 0 ? (
-                    <>✓ Musiques prêtes ({downloadedCount})</>
-                  ) : (
-                    <>⬇️ Tout télécharger ({tracks.length})</>
-                  )}
+                  {showMusicManager ? '🙈 Masquer' : '👁️ Afficher'}
                 </button>
 
-                <button
-                  onClick={() => fetchMusicList()}
-                  title="Actualiser la liste des musiques"
-                  className="p-2 rounded-lg border border-zinc-300 dark:border-zinc-700 hover:bg-zinc-100 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-300 transition-colors cursor-pointer text-xs"
-                >
-                  🔄
-                </button>
+                {showMusicManager && (
+                  <>
+                    <button
+                      onClick={downloadAllTracks}
+                      disabled={downloadProgress.isDownloading || tracks.length === 0}
+                      className="w-full sm:w-auto rounded-lg bg-indigo-600 px-4 py-2 text-white text-xs font-semibold shadow-sm hover:bg-indigo-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer flex items-center justify-center gap-2"
+                    >
+                      {downloadProgress.isDownloading ? (
+                        <>
+                          <span className="inline-block w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                          Téléchargement ({downloadProgress.current}/{downloadProgress.total})...
+                        </>
+                      ) : downloadedCount === tracks.length && tracks.length > 0 ? (
+                        <>✓ Musiques prêtes ({downloadedCount})</>
+                      ) : (
+                        <>⬇️ Tout télécharger ({tracks.length})</>
+                      )}
+                    </button>
+
+                    <button
+                      onClick={() => fetchMusicList()}
+                      title="Actualiser la liste des musiques"
+                      className="p-2 rounded-lg border border-zinc-300 dark:border-zinc-700 hover:bg-zinc-100 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-300 transition-colors cursor-pointer text-xs"
+                    >
+                      🔄
+                    </button>
+                  </>
+                )}
               </div>
             </div>
 
-            {/* Barre de progression du téléchargement global */}
-            {downloadProgress.isDownloading && (
-              <div className="w-full bg-zinc-200 dark:bg-zinc-700 h-2 rounded-full overflow-hidden mt-1">
-                <div
-                  className="bg-indigo-600 h-full transition-all duration-300"
-                  style={{
-                    width: downloadProgress.total > 0 ? `${(downloadProgress.current / downloadProgress.total) * 100}%` : '0%',
-                  }}
-                />
-              </div>
-            )}
-
-            {/* Liste des musiques disponibles avec options de pré-écoute et téléchargement */}
-            {tracks.length > 0 ? (
-              <div className="flex flex-col gap-2 mt-2 max-h-60 overflow-y-auto pr-1">
-                {tracks.map((track) => {
-                  const isDownloaded = Boolean(downloadedBlobs[track.id]);
-                  const isPreviewing = activePreviewId === track.id && isPlaying;
-
-                  return (
+            {showMusicManager && (
+              <>
+                {/* Barre de progression du téléchargement global */}
+                {downloadProgress.isDownloading && (
+                  <div className="w-full bg-zinc-200 dark:bg-zinc-700 h-2 rounded-full overflow-hidden mt-1">
                     <div
-                      key={track.id}
-                      className="flex items-center justify-between p-2.5 bg-white dark:bg-zinc-900 rounded-lg border border-zinc-200 dark:border-zinc-700 text-sm gap-3"
-                    >
-                      <div className="flex items-center gap-3 min-w-0">
-                        <button
-                          onClick={() => handlePreviewTrack(track)}
-                          className={`w-8 h-8 rounded-full flex items-center justify-center text-xs transition-colors shrink-0 ${
-                            isPreviewing
-                              ? 'bg-indigo-600 text-white'
-                              : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-200 dark:hover:bg-zinc-700'
-                          }`}
-                          title={isPreviewing ? 'Mettre en pause' : 'Pré-écouter'}
+                      className="bg-indigo-600 h-full transition-all duration-300"
+                      style={{
+                        width: downloadProgress.total > 0 ? `${(downloadProgress.current / downloadProgress.total) * 100}%` : '0%',
+                      }}
+                    />
+                  </div>
+                )}
+
+                {/* Liste des musiques disponibles avec options de pré-écoute et téléchargement */}
+                {tracks.length > 0 ? (
+                  <div className="flex flex-col gap-2 mt-2 max-h-60 overflow-y-auto pr-1">
+                    {tracks.map((track) => {
+                      const isDownloaded = Boolean(downloadedBlobs[track.id]);
+                      const isPreviewing = activePreviewId === track.id && isPlaying;
+
+                      return (
+                        <div
+                          key={track.id}
+                          className="flex items-center justify-between p-2.5 bg-white dark:bg-zinc-900 rounded-lg border border-zinc-200 dark:border-zinc-700 text-sm gap-3"
                         >
-                          {isPreviewing ? '⏸️' : '▶️'}
-                        </button>
-                        <div className="truncate">
-                          <p className="font-medium text-zinc-800 dark:text-zinc-200 truncate">
-                            {track.title}
-                          </p>
-                          <span className="text-xs text-zinc-400 truncate block">
-                            {track.filename}
-                          </span>
+                          <div className="flex items-center gap-3 min-w-0">
+                            <button
+                              onClick={() => handlePreviewTrack(track)}
+                              className={`w-8 h-8 rounded-full flex items-center justify-center text-xs transition-colors shrink-0 ${
+                                isPreviewing
+                                  ? 'bg-indigo-600 text-white'
+                                  : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-200 dark:hover:bg-zinc-700'
+                              }`}
+                              title={isPreviewing ? 'Mettre en pause' : 'Pré-écouter'}
+                            >
+                              {isPreviewing ? '⏸️' : '▶️'}
+                            </button>
+                            <div className="truncate">
+                              <p className="font-medium text-zinc-800 dark:text-zinc-200 truncate">
+                                {track.title}
+                              </p>
+                              <span className="text-xs text-zinc-400 truncate block">
+                                {track.filename}
+                              </span>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-2 shrink-0">
+                            {isDownloaded ? (
+                              <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800 dark:bg-green-950 dark:text-green-300">
+                                ✓ En local
+                              </span>
+                            ) : (
+                              <button
+                                onClick={() => downloadTrack(track)}
+                                className="text-xs px-2 py-1 rounded bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors"
+                              >
+                                Précharger
+                              </button>
+                            )}
+
+                            <button
+                              onClick={() => downloadFileToDisk(track)}
+                              title="Télécharger le fichier .mp3 sur votre appareil"
+                              className="p-1.5 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300 transition-colors"
+                            >
+                              ⬇️
+                            </button>
+                          </div>
                         </div>
-                      </div>
-
-                      <div className="flex items-center gap-2 shrink-0">
-                        {isDownloaded ? (
-                          <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800 dark:bg-green-950 dark:text-green-300">
-                            ✓ En local
-                          </span>
-                        ) : (
-                          <button
-                            onClick={() => downloadTrack(track)}
-                            className="text-xs px-2 py-1 rounded bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors"
-                          >
-                            Précharger
-                          </button>
-                        )}
-
-                        <button
-                          onClick={() => downloadFileToDisk(track)}
-                          title="Télécharger le fichier .mp3 sur votre appareil"
-                          className="p-1.5 rounded hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300 transition-colors"
-                        >
-                          ⬇️
-                        </button>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            ) : (
-              <p className="text-xs text-zinc-400 italic py-2">
-                Aucune musique trouvée dans le répertoire du serveur.
-              </p>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <p className="text-xs text-zinc-400 italic py-2">
+                    Aucune musique trouvée dans le répertoire du serveur.
+                  </p>
+                )}
+              </>
             )}
           </div>
         )}
