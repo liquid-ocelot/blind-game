@@ -10,14 +10,18 @@ import {
   closeSync,
   mkdirSync,
   writeFileSync,
+  readFileSync,
 } from 'node:fs';
 
 export interface MusicTrack {
   id: string;
   filename: string;
   title: string;
+  author?: string;
+  artist?: string;
   url: string;
   duration?: number;
+  startTimes?: number[];
 }
 
 @Injectable()
@@ -87,7 +91,28 @@ export class MusicService implements OnModuleInit {
 
           if (!existsSync(txtFilePath) && !existsSync(altTxtFilePath)) {
             try {
-              writeFileSync(txtFilePath, `${nameWithoutExt}\n`, 'utf-8');
+              let defaultAuthor = '';
+              if (nameWithoutExt.includes(' - ')) {
+                defaultAuthor = nameWithoutExt.split(' - ')[0].trim();
+              } else {
+                defaultAuthor = 'Artiste Inconnu';
+              }
+
+              const fullPath = join(this.musicDir, file);
+              const duration = this.getAudioDuration(fullPath);
+              let defaultStartTimesStr = '13, 30, 60';
+              if (duration && duration > 53) {
+                const t1 = 13;
+                const maxT = Math.floor(duration - 40);
+                const midT = Math.floor((t1 + maxT) / 2);
+                defaultStartTimesStr = `${t1}, ${midT}, ${maxT}`;
+              }
+
+              writeFileSync(
+                txtFilePath,
+                `${defaultAuthor}\n${defaultStartTimesStr}\n`,
+                'utf-8',
+              );
             } catch (err) {
               console.error(`Error creating metadata file for ${file}:`, err);
             }
@@ -96,6 +121,70 @@ export class MusicService implements OnModuleInit {
       }
     } catch (err) {
       console.error('Error ensuring metadata files:', err);
+    }
+  }
+
+  readTrackMetadata(
+    nameWithoutExt: string,
+    originalFileName: string,
+  ): { author?: string; startTimes?: number[] } {
+    const metadataDir = this.getMetadataDirectory();
+    const txtFilePath = join(metadataDir, `${nameWithoutExt}.txt`);
+    const altTxtFilePath = join(metadataDir, `${originalFileName}.txt`);
+
+    let targetPath: string | null = null;
+    if (existsSync(txtFilePath)) {
+      targetPath = txtFilePath;
+    } else if (existsSync(altTxtFilePath)) {
+      targetPath = altTxtFilePath;
+    }
+
+    if (!targetPath) {
+      return {};
+    }
+
+    try {
+      const fileContent = readFileSync(targetPath, 'utf-8');
+      const lines = fileContent.split(/\r?\n/);
+      const authorLine = lines[0]?.trim();
+      const startTimesLine = lines[1]?.trim();
+
+      const author =
+        authorLine && authorLine.length > 0 ? authorLine : undefined;
+
+      let startTimes: number[] | undefined = undefined;
+      if (startTimesLine && startTimesLine.length > 0) {
+        const parts = startTimesLine
+          .split(/[,;\s]+/)
+          .map((p) => p.trim())
+          .filter(Boolean);
+        const parsedTimes: number[] = [];
+        for (const part of parts) {
+          if (part.includes(':')) {
+            const timeParts = part.split(':').map((tp) => parseInt(tp, 10));
+            if (
+              timeParts.length === 2 &&
+              !isNaN(timeParts[0]) &&
+              !isNaN(timeParts[1])
+            ) {
+              parsedTimes.push(timeParts[0] * 60 + timeParts[1]);
+            }
+          } else {
+            const num = parseInt(part, 10);
+            if (!isNaN(num) && num >= 0) {
+              parsedTimes.push(num);
+            }
+          }
+        }
+        if (parsedTimes.length > 0) {
+          startTimes = parsedTimes;
+        }
+      }
+
+      return { author, startTimes };
+    } catch (err) {
+      console.error(`Error reading metadata file ${targetPath}:`, err);
+      return {};
     }
   }
 
@@ -273,12 +362,16 @@ export class MusicService implements OnModuleInit {
           const nameWithoutExt = file.replace(/\.[^/.]+$/, '');
           const fullPath = join(this.musicDir, file);
           const duration = this.getAudioDuration(fullPath);
+          const metadata = this.readTrackMetadata(nameWithoutExt, file);
           return {
             id: String(index + 1),
             filename: file,
             title: nameWithoutExt,
+            author: metadata.author,
+            artist: metadata.author,
             url: `/music/${encodeURIComponent(file)}`,
             duration,
+            startTimes: metadata.startTimes,
           };
         });
     } catch (err) {

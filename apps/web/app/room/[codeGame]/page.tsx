@@ -11,7 +11,11 @@ export interface MusicTrack {
   id: string;
   filename: string;
   title: string;
+  author?: string;
+  artist?: string;
   url: string;
+  duration?: number;
+  startTimes?: number[];
 }
 
 export default function RoomPage() {
@@ -639,7 +643,18 @@ export default function RoomPage() {
                   <div>
                     <h3 className="font-semibold text-zinc-900 dark:text-white text-base">
                       {isMasterUser ? (
-                        showTitle && activeTrack ? activeTrack.title : 'Musique en cours de lecture'
+                        showTitle && activeTrack ? (
+                          <>
+                            {activeTrack.title}
+                            {activeTrack.author && (
+                              <span className="text-zinc-500 dark:text-zinc-400 font-normal ml-1">
+                                - {activeTrack.author}
+                              </span>
+                            )}
+                          </>
+                        ) : (
+                          'Musique en cours de lecture'
+                        )
                       ) : (
                         'Écoutez attentivement !'
                       )}
@@ -727,6 +742,11 @@ export default function RoomPage() {
               {activeTrack && (
                 <p className="text-sm font-semibold text-indigo-600 dark:text-indigo-400 mt-1">
                   Morceau : &quot;{activeTrack.title}&quot;
+                  {activeTrack.author && (
+                    <span className="font-normal text-zinc-600 dark:text-zinc-300 ml-1">
+                      - {activeTrack.author}
+                    </span>
+                  )}
                 </p>
               )}
             </div>
@@ -1238,6 +1258,11 @@ export default function RoomPage() {
                             <div className="truncate">
                               <p className="font-medium text-zinc-800 dark:text-zinc-200 truncate">
                                 {track.title}
+                                {track.author && (
+                                  <span className="text-xs text-zinc-400 font-normal ml-1.5">
+                                    ({track.author})
+                                  </span>
+                                )}
                               </p>
                               <span className="text-xs text-zinc-400 truncate block">
                                 {track.filename}

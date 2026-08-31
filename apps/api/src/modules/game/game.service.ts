@@ -6,7 +6,22 @@ import { GameState } from './game-state';
 import { ServerEvents, GameMode, Team, Player } from '@blindtest/shared';
 import { MusicService, MusicTrack } from './music.service';
 
-export function calculateAudioStartTime(duration?: number): number {
+export function calculateAudioStartTime(
+  duration?: number,
+  startTimes?: number[],
+): number {
+  if (Array.isArray(startTimes) && startTimes.length > 0) {
+    const randomIndex = Math.floor(Math.random() * startTimes.length);
+    const chosenTime = startTimes[randomIndex];
+    if (
+      typeof chosenTime === 'number' &&
+      !isNaN(chosenTime) &&
+      chosenTime >= 0
+    ) {
+      return chosenTime;
+    }
+  }
+
   const minStartTime = 13;
   const musicDuration =
     typeof duration === 'number' && duration > 0 ? duration : 180;
@@ -213,7 +228,10 @@ export class GameService {
       game.state = GameState.PLAYING;
       game.startRound();
       const track = game.getCurrentTrack();
-      const startTime = calculateAudioStartTime(track?.duration);
+      const startTime = calculateAudioStartTime(
+        track?.duration,
+        track?.startTimes,
+      );
 
       this.server?.to(room).emit(ServerEvents.ROUND_STARTED, {
         currentRound: game.currentRound,

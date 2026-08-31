@@ -332,6 +332,14 @@ describe('GameService', () => {
         expect(startTime).toBeLessThanOrEqual(140);
       }
     });
+
+    it('should pick one of the startTimes if provided', () => {
+      const startTimes = [25, 45, 90];
+      for (let i = 0; i < 50; i++) {
+        const startTime = calculateAudioStartTime(180, startTimes);
+        expect(startTimes).toContain(startTime);
+      }
+    });
   });
 
   describe('MusicService metadata directory and files', () => {
@@ -345,9 +353,9 @@ describe('GameService', () => {
       fs.rmSync(tmpDir, { recursive: true, force: true });
     });
 
-    it('should create metadata directory and txt files for every music file', () => {
-      // Créer de faux fichiers musicaux
-      fs.writeFileSync(path.join(tmpDir, 'chanson1.mp3'), 'fake-audio');
+    it('should create metadata directory and txt files with author (line 1) and start times (line 2)', () => {
+      // Créer de faux fichiers musicaux dont un avec "Artiste - Titre"
+      fs.writeFileSync(path.join(tmpDir, 'Daft Punk - One More Time.mp3'), 'fake-audio');
       fs.writeFileSync(path.join(tmpDir, 'chanson2.wav'), 'fake-audio');
 
       const customMusicService = new MusicService();
@@ -357,8 +365,43 @@ describe('GameService', () => {
 
       const metadataDir = path.join(tmpDir, 'metadata');
       expect(fs.existsSync(metadataDir)).toBe(true);
-      expect(fs.existsSync(path.join(metadataDir, 'chanson1.txt'))).toBe(true);
-      expect(fs.existsSync(path.join(metadataDir, 'chanson2.txt'))).toBe(true);
+
+      const daftPunkTxt = path.join(metadataDir, 'Daft Punk - One More Time.txt');
+      expect(fs.existsSync(daftPunkTxt)).toBe(true);
+      const daftPunkContent = fs.readFileSync(daftPunkTxt, 'utf-8');
+      const daftPunkLines = daftPunkContent.split(/\r?\n/);
+      expect(daftPunkLines[0].trim()).toBe('Daft Punk');
+      expect(daftPunkLines[1].trim()).toBeTruthy();
+
+      const chanson2Txt = path.join(metadataDir, 'chanson2.txt');
+      expect(fs.existsSync(chanson2Txt)).toBe(true);
+      const chanson2Content = fs.readFileSync(chanson2Txt, 'utf-8');
+      const chanson2Lines = chanson2Content.split(/\r?\n/);
+      expect(chanson2Lines[0].trim()).toBe('Artiste Inconnu');
+      expect(chanson2Lines[1].trim()).toBeTruthy();
+    });
+
+    it('should read metadata author and start times correctly and support mm:ss format', () => {
+      fs.writeFileSync(path.join(tmpDir, 'Queen - Bohemian Rhapsody.mp3'), 'fake-audio');
+      const metadataDir = path.join(tmpDir, 'metadata');
+      fs.mkdirSync(metadataDir, { recursive: true });
+      fs.writeFileSync(
+        path.join(metadataDir, 'Queen - Bohemian Rhapsody.txt'),
+        'Queen\n13, 0:45, 1:30\n',
+        'utf-8',
+      );
+
+      const customMusicService = new MusicService();
+      (customMusicService as any).musicDir = tmpDir;
+
+      const metadata = customMusicService.readTrackMetadata('Queen - Bohemian Rhapsody', 'Queen - Bohemian Rhapsody.mp3');
+      expect(metadata.author).toBe('Queen');
+      expect(metadata.startTimes).toEqual([13, 45, 90]);
+
+      const tracks = customMusicService.getAvailableTracks();
+      expect(tracks.length).toBe(1);
+      expect(tracks[0].author).toBe('Queen');
+      expect(tracks[0].startTimes).toEqual([13, 45, 90]);
     });
 
     it('should not overwrite existing txt metadata files', () => {
@@ -367,7 +410,7 @@ describe('GameService', () => {
       fs.mkdirSync(metadataDir, { recursive: true });
       fs.writeFileSync(
         path.join(metadataDir, 'chanson.txt'),
-        'custom-metadata-content',
+        'Artiste Personnalisé\n25, 50\n',
         'utf-8',
       );
 
