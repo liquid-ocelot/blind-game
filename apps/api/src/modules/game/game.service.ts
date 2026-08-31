@@ -202,7 +202,7 @@ export class GameService {
       game.state = GameState.PLAYING;
       game.startRound();
       const track = game.getCurrentTrack();
-      const startTime = Math.floor(Math.random() * 21) + 10;
+      const startTime = Math.floor(Math.random() * 41) + 10;
 
       this.server?.to(room).emit(ServerEvents.ROUND_STARTED, {
         currentRound: game.currentRound,
