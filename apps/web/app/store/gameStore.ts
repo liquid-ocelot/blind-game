@@ -25,6 +25,8 @@ export interface GameStoreState {
   totalRounds: number;
   gameMode: GameMode;
   teams: Team[];
+  correctPlayers: string[];
+  correctTeams: string[];
   masterId: string | null | undefined;
   playerName: string | null;
 
@@ -41,6 +43,10 @@ export interface GameStoreState {
   setTotalRounds: (total: number) => void;
   setGameMode: (gameMode: GameMode) => void;
   setTeams: (teams: Team[]) => void;
+  setCorrectPlayers: (correctPlayers: string[]) => void;
+  setCorrectTeams: (correctTeams: string[]) => void;
+  addCorrectAnswer: (playerId: string, teamId?: string | null) => void;
+  clearCorrectAnswers: () => void;
   setMasterId: (masterId: string | null | undefined) => void;
   setPlayerName: (name: string | null) => void;
   resetGame: () => void;
@@ -54,6 +60,8 @@ const initialState = {
   totalRounds: 5,
   gameMode: GameMode.SOLO,
   teams: DEFAULT_TEAMS.slice(0, 2),
+  correctPlayers: [],
+  correctTeams: [],
   masterId: null,
   playerName: null,
 };
@@ -115,6 +123,23 @@ export const useGameStore = create<GameStoreState>((set) => ({
   setGameMode: (gameMode) => set({ gameMode }),
 
   setTeams: (teams) => set({ teams }),
+
+  setCorrectPlayers: (correctPlayers) => set({ correctPlayers }),
+
+  setCorrectTeams: (correctTeams) => set({ correctTeams }),
+
+  addCorrectAnswer: (playerId, teamId) =>
+    set((prev) => ({
+      correctPlayers: prev.correctPlayers.includes(playerId)
+        ? prev.correctPlayers
+        : [...prev.correctPlayers, playerId],
+      correctTeams:
+        teamId && !prev.correctTeams.includes(teamId)
+          ? [...prev.correctTeams, teamId]
+          : prev.correctTeams,
+    })),
+
+  clearCorrectAnswers: () => set({ correctPlayers: [], correctTeams: [] }),
 
   setMasterId: (masterId) => set({ masterId }),
 

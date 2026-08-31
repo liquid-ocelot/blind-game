@@ -14,6 +14,7 @@ export class GameSession {
   teams: Team[];
   roundStartTime: number = 0;
   correctPlayersForCurrentRound: Set<string> = new Set();
+  correctTeamsForCurrentRound: Set<string> = new Set();
   tracks: MusicTrack[] = [];
   private roundTimer?: NodeJS.Timeout;
   private roundResolver?: () => void;
@@ -120,12 +121,14 @@ export class GameSession {
   startRound() {
     this.roundStartTime = Math.floor(Date.now() / 1000);
     this.correctPlayersForCurrentRound.clear();
+    this.correctTeamsForCurrentRound.clear();
   }
 
   resetGame() {
     this.currentRound = 0;
     this.roundStartTime = 0;
     this.correctPlayersForCurrentRound.clear();
+    this.correctTeamsForCurrentRound.clear();
     this.tracks = [];
     if (this.roundTimer) {
       clearTimeout(this.roundTimer);
@@ -151,15 +154,68 @@ export class GameSession {
     return this.correctPlayersForCurrentRound.has(playerId);
   }
 
+  hasTeamAnsweredCorrectly(teamId: string): boolean {
+    return this.correctTeamsForCurrentRound.has(teamId);
+  }
+
+  canPlayerAnswer(playerId: string): boolean {
+    if (this.correctPlayersForCurrentRound.has(playerId)) {
+      return false;
+    }
+
+    if (this.gameMode === GameMode.TEAM) {
+      const player = this.players.find((p) => p.id === playerId);
+      if (player?.teamId && this.correctTeamsForCurrentRound.has(player.teamId)) {
+        return false;
+      }
+    }
+
+    return true;
+  }
+
   recordCorrectAnswer(playerId: string) {
     this.correctPlayersForCurrentRound.add(playerId);
+    const player = this.players.find((p) => p.id === playerId);
+    if (player?.teamId) {
+      this.correctTeamsForCurrentRound.add(player.teamId);
+    }
   }
 
   haveAllPlayersAnswered(): boolean {
-    return (
-      this.players.length > 0 &&
-      this.players.every((p) => this.correctPlayersForCurrentRound.has(p.id))
-    );
+    if (this.players.length === 0) {
+      return false;
+    }
+
+    if (this.gameMode === GameMode.TEAM) {
+      const activeTeamIds = new Set(
+        this.players
+          .filter((p) => Boolean(p.teamId))
+          .map((p) => p.teamId as string)
+      );
+      const unassignedPlayers = this.players.filter((p) => !p.teamId);
+
+      if (activeTeamIds.size === 0 && unassignedPlayers.length === 0) {
+        return false;
+      }
+
+      const allActiveTeamsAnswered =
+        activeTeamIds.size > 0
+          ? Array.from(activeTeamIds).every((teamId) =>
+              this.correctTeamsForCurrentRound.has(teamId)
+            )
+          : true;
+
+      const allUnassignedAnswered =
+        unassignedPlayers.length > 0
+          ? unassignedPlayers.every((p) =>
+              this.correctPlayersForCurrentRound.has(p.id)
+            )
+          : true;
+
+      return allActiveTeamsAnswered && allUnassignedAnswered;
+    }
+
+    return this.players.every((p) => this.correctPlayersForCurrentRound.has(p.id));
   }
 
   waitForRoundEnd(durationMs: number = 30000): Promise<void> {

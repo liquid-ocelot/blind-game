@@ -83,7 +83,7 @@ export class GameService {
       return;
     }
 
-    if (game.hasPlayerAnsweredCorrectly(client.id)) {
+    if (!game.canPlayerAnswer(client.id)) {
       return;
     }
 
@@ -127,8 +127,16 @@ export class GameService {
     game.recordCorrectAnswer(client.id);
 
     const teamScores = game.getTeamScores();
+    const correctPlayers = Array.from(game.correctPlayersForCurrentRound);
+    const correctTeams = Array.from(game.correctTeamsForCurrentRound);
 
-    client.emit(ServerEvents.VALID_ANSWER, { newScore, teamScores });
+    client.emit(ServerEvents.VALID_ANSWER, {
+      newScore,
+      teamScores,
+      teamId: player?.teamId,
+      correctPlayers,
+      correctTeams,
+    });
 
     const room = `game:${game.code}`;
     this.server?.to(room).emit(ServerEvents.SCORE_UPDATED, {
@@ -136,6 +144,8 @@ export class GameService {
       newScore,
       players: game.players,
       teamScores,
+      correctPlayers,
+      correctTeams,
     });
 
     if (game.haveAllPlayersAnswered()) {
@@ -190,6 +200,7 @@ export class GameService {
     for (let round = 1; round <= totalRounds; round++) {
       game.currentRound = round;
       game.state = GameState.PLAYING;
+      game.startRound();
       const track = game.getCurrentTrack();
       const startTime = Math.floor(Math.random() * 21) + 10;
 
@@ -202,9 +213,9 @@ export class GameService {
         startTime,
         gameMode: game.gameMode,
         teams: game.getTeamScores(),
+        correctPlayers: [],
+        correctTeams: [],
       });
-
-      game.startRound();
 
       // Durée du round pour deviner (fin anticipée si tous les joueurs ont trouvé)
       await game.waitForRoundEnd(30000);

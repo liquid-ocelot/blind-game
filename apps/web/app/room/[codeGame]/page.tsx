@@ -37,6 +37,11 @@ export default function RoomPage() {
     setGameMode,
     teams,
     setTeams,
+    correctPlayers,
+    correctTeams,
+    setCorrectPlayers,
+    setCorrectTeams,
+    clearCorrectAnswers,
     setCode,
   } = useGameStore();
 
@@ -355,6 +360,7 @@ export default function RoomPage() {
       teams?: Team[];
     }) {
       setState(GameState.COUNTDOWN);
+      clearCorrectAnswers();
       if (data?.code) setCode(data.code);
       if (data?.totalRounds) setTotalRounds(data.totalRounds);
       if (data?.gameMode) setGameMode(data.gameMode);
@@ -379,12 +385,16 @@ export default function RoomPage() {
       startTime?: number;
       gameMode?: GameMode;
       teams?: Team[];
+      correctPlayers?: string[];
+      correctTeams?: string[];
     }) {
       setState(GameState.PLAYING);
       setCurrentRound(data.currentRound);
       setTotalRounds(data.totalRounds);
       if (data?.gameMode) setGameMode(data.gameMode);
       if (data?.teams) setTeams(data.teams);
+      setCorrectPlayers(data?.correctPlayers || []);
+      setCorrectTeams(data?.correctTeams || []);
       setTimeLeft(data.duration || 30);
       setShowTitle(false);
 
@@ -413,6 +423,7 @@ export default function RoomPage() {
       teams?: Team[];
     }) {
       setState(GameState.RESULTS);
+      clearCorrectAnswers();
       if (data?.players) {
         setPlayers(data.players);
       }
@@ -429,6 +440,7 @@ export default function RoomPage() {
 
     function onRoundCountdown() {
       setState(GameState.COUNTDOWN);
+      clearCorrectAnswers();
       stopAudio();
     }
 
@@ -437,12 +449,20 @@ export default function RoomPage() {
       newScore?: number;
       players?: Player[];
       teamScores?: Team[];
+      correctPlayers?: string[];
+      correctTeams?: string[];
     }) {
       if (data?.players) {
         setPlayers(data.players);
       }
       if (data?.teamScores) {
         setTeams(data.teamScores);
+      }
+      if (data?.correctPlayers) {
+        setCorrectPlayers(data.correctPlayers);
+      }
+      if (data?.correctTeams) {
+        setCorrectTeams(data.correctTeams);
       }
     }
 
@@ -452,6 +472,7 @@ export default function RoomPage() {
       teams?: Team[];
     }) {
       setState(GameState.FINISHED);
+      clearCorrectAnswers();
       stopAudio();
       if (data?.players) {
         setPlayers(data.players);
@@ -517,6 +538,9 @@ export default function RoomPage() {
     setCode,
     playTrack,
     stopAudio,
+    setCorrectPlayers,
+    setCorrectTeams,
+    clearCorrectAnswers,
   ]);
 
   const downloadedCount = Object.keys(downloadedBlobs).length;
@@ -1277,10 +1301,15 @@ export default function RoomPage() {
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 w-full">
                   {teams.map((team) => {
                     const teamMembers = players.filter((p) => p.teamId === team.id);
+                    const hasTeamFound = correctTeams.includes(team.id);
                     return (
                       <div
                         key={team.id}
-                        className="flex flex-col p-4 bg-zinc-50 dark:bg-zinc-800/60 rounded-xl border border-zinc-200 dark:border-zinc-700 shadow-sm"
+                        className={`flex flex-col p-4 bg-zinc-50 dark:bg-zinc-800/60 rounded-xl border ${
+                          hasTeamFound && state === GameState.PLAYING
+                            ? 'border-green-400 dark:border-green-700 bg-green-50/30 dark:bg-green-950/20 shadow-md'
+                            : 'border-zinc-200 dark:border-zinc-700 shadow-sm'
+                        }`}
                         style={{ borderTopColor: team.color, borderTopWidth: '4px' }}
                       >
                         <div className="flex items-center justify-between pb-2 border-b border-zinc-200 dark:border-zinc-700">
@@ -1293,24 +1322,43 @@ export default function RoomPage() {
                               {team.name}
                             </span>
                           </div>
-                          <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300">
-                            {teamMembers.length} joueur{teamMembers.length > 1 ? 's' : ''}
-                          </span>
+                          <div className="flex items-center gap-1.5">
+                            {state === GameState.PLAYING && hasTeamFound && (
+                              <span className="text-[10px] font-bold text-green-700 dark:text-green-300 bg-green-100 dark:bg-green-900/60 px-2 py-0.5 rounded-full border border-green-300 dark:border-green-800 animate-pulse">
+                                ✓ A trouvé !
+                              </span>
+                            )}
+                            <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300">
+                              {teamMembers.length} joueur{teamMembers.length > 1 ? 's' : ''}
+                            </span>
+                          </div>
                         </div>
 
                         {/* Liste des joueurs de l'équipe */}
                         <div className="flex flex-col gap-1.5 mt-3 min-h-[60px]">
                           {teamMembers.length > 0 ? (
-                            teamMembers.map((member) => (
-                              <div
-                                key={member.id}
-                                className="flex items-center justify-between p-2 rounded-lg bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 text-xs"
-                              >
-                                <span className="font-medium text-zinc-800 dark:text-zinc-200 truncate">
-                                  {member.name}
-                                </span>
-                              </div>
-                            ))
+                            teamMembers.map((member) => {
+                              const hasMemberFound = correctPlayers.includes(member.id);
+                              return (
+                                <div
+                                  key={member.id}
+                                  className={`flex items-center justify-between p-2 rounded-lg border text-xs ${
+                                    hasMemberFound && state === GameState.PLAYING
+                                      ? 'bg-green-50 dark:bg-green-950/50 border-green-300 dark:border-green-800 font-semibold'
+                                      : 'bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-700'
+                                  }`}
+                                >
+                                  <span className="font-medium text-zinc-800 dark:text-zinc-200 truncate">
+                                    {member.name}
+                                  </span>
+                                  {state === GameState.PLAYING && hasMemberFound && (
+                                    <span className="text-[10px] font-bold text-green-600 dark:text-green-400">
+                                      ✓ Réponse validée
+                                    </span>
+                                  )}
+                                </div>
+                              );
+                            })
                           ) : (
                             <p className="text-xs text-zinc-400 italic py-2 text-center">
                               Aucun joueur dans cette équipe
@@ -1350,19 +1398,33 @@ export default function RoomPage() {
               </div>
             ) : (
               <ul className="grid grid-cols-1 sm:grid-cols-2 gap-2 w-full">
-                {players.map((player) => (
-                  <li
-                    key={player.id}
-                    className="flex items-center gap-3 p-3 bg-zinc-50 dark:bg-zinc-800 rounded-lg border border-zinc-200 dark:border-zinc-700"
-                  >
-                    <div className="w-8 h-8 rounded-full bg-indigo-100 dark:bg-indigo-900 flex items-center justify-center text-indigo-600 dark:text-indigo-400 font-bold text-sm">
-                      {player.name.charAt(0).toUpperCase()}
-                    </div>
-                    <span className="text-zinc-700 dark:text-zinc-200 font-medium truncate">
-                      {player.name}
-                    </span>
-                  </li>
-                ))}
+                {players.map((player) => {
+                  const hasPlayerFound = correctPlayers.includes(player.id);
+                  return (
+                    <li
+                      key={player.id}
+                      className={`flex items-center justify-between gap-3 p-3 rounded-lg border ${
+                        hasPlayerFound && state === GameState.PLAYING
+                          ? 'bg-green-50 dark:bg-green-950/40 border-green-300 dark:border-green-800'
+                          : 'bg-zinc-50 dark:bg-zinc-800 border-zinc-200 dark:border-zinc-700'
+                      }`}
+                    >
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className="w-8 h-8 rounded-full bg-indigo-100 dark:bg-indigo-900 flex items-center justify-center text-indigo-600 dark:text-indigo-400 font-bold text-sm shrink-0">
+                          {player.name.charAt(0).toUpperCase()}
+                        </div>
+                        <span className="text-zinc-700 dark:text-zinc-200 font-medium truncate">
+                          {player.name}
+                        </span>
+                      </div>
+                      {hasPlayerFound && state === GameState.PLAYING && (
+                        <span className="text-xs font-bold text-green-700 dark:text-green-300 bg-green-100 dark:bg-green-900/60 px-2 py-0.5 rounded-full border border-green-300 dark:border-green-800 shrink-0">
+                          ✓ A trouvé !
+                        </span>
+                      )}
+                    </li>
+                  );
+                })}
               </ul>
             )
           ) : (

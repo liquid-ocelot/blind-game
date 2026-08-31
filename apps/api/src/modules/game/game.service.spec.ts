@@ -242,5 +242,67 @@ describe('GameService', () => {
       expect(redTeam?.score).toBe(80);
       expect(blueTeam?.score).toBe(40);
     });
+
+    it('should only allow ONE correct answer per team per round in team mode', () => {
+      const code = sessionManager.createGame('master-1');
+      const game = sessionManager.getGame(code)!;
+      game.state = GameState.PLAYING;
+      game.currentRound = 1;
+      game.gameMode = GameMode.TEAM;
+      game.teams = DEFAULT_TEAMS.slice(0, 2);
+      game.tracks = [
+        {
+          id: '1',
+          name: 'track.mp3',
+          title: 'Star Wars',
+          url: 'http://test/track.mp3',
+        },
+      ];
+      game.players = [
+        { id: 'p1', name: 'Alice', teamId: 'team-red', score: 0 },
+        { id: 'p2', name: 'Bob', teamId: 'team-red', score: 0 },
+        { id: 'p3', name: 'Charlie', teamId: 'team-blue', score: 0 },
+      ];
+
+      const client1 = { id: 'p1', emit: jest.fn() } as unknown as Socket;
+      const client2 = { id: 'p2', emit: jest.fn() } as unknown as Socket;
+      const client3 = { id: 'p3', emit: jest.fn() } as unknown as Socket;
+
+      // 1. Premier joueur de l'équipe rouge répond correctement
+      service.verifyAnswer(code, 'Star Wars', client1);
+      expect(client1.emit).toHaveBeenCalledWith(
+        ServerEvents.VALID_ANSWER,
+        expect.objectContaining({
+          newScore: expect.any(Number),
+          teamId: 'team-red',
+        }),
+      );
+      expect(game.hasPlayerAnsweredCorrectly('p1')).toBe(true);
+      expect(game.hasTeamAnsweredCorrectly('team-red')).toBe(true);
+      expect(game.canPlayerAnswer('p1')).toBe(false);
+      expect(game.canPlayerAnswer('p2')).toBe(false); // Coéquipier bloqué
+
+      // 2. Deuxième joueur de l'équipe rouge tente de répondre
+      service.verifyAnswer(code, 'Star Wars', client2);
+      expect(client2.emit).not.toHaveBeenCalled();
+      const p2 = game.players.find((p) => p.id === 'p2');
+      expect(p2?.score).toBe(0);
+      expect(game.hasPlayerAnsweredCorrectly('p2')).toBe(false);
+
+      // 3. Joueur de l'équipe bleue peut répondre
+      expect(game.canPlayerAnswer('p3')).toBe(true);
+      service.verifyAnswer(code, 'Star Wars', client3);
+      expect(client3.emit).toHaveBeenCalledWith(
+        ServerEvents.VALID_ANSWER,
+        expect.objectContaining({
+          newScore: expect.any(Number),
+          teamId: 'team-blue',
+        }),
+      );
+      expect(game.hasTeamAnsweredCorrectly('team-blue')).toBe(true);
+
+      // 4. Toutes les équipes actives ont répondu -> haveAllPlayersAnswered est vrai
+      expect(game.haveAllPlayersAnswered()).toBe(true);
+    });
   });
 });

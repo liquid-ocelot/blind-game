@@ -32,6 +32,11 @@ export default function PlayPage() {
     setGameMode,
     teams,
     setTeams,
+    correctPlayers,
+    correctTeams,
+    setCorrectPlayers,
+    setCorrectTeams,
+    clearCorrectAnswers,
     code,
     setCode,
     updateScore,
@@ -123,6 +128,7 @@ export default function PlayPage() {
     }) {
       setState(GameState.COUNTDOWN);
       setHasAnsweredCorrectly(false);
+      clearCorrectAnswers();
       setSubmittedAnswer(null);
       setAnswer('');
       if (data?.code) {
@@ -150,6 +156,8 @@ export default function PlayPage() {
       duration: number;
       gameMode?: GameMode;
       teams?: Team[];
+      correctPlayers?: string[];
+      correctTeams?: string[];
     }) {
       setState(GameState.PLAYING);
       setCurrentRound(data.currentRound);
@@ -160,6 +168,8 @@ export default function PlayPage() {
       setSubmittedAnswer(null);
       setAnswer('');
       setHasAnsweredCorrectly(false);
+      setCorrectPlayers(data?.correctPlayers || []);
+      setCorrectTeams(data?.correctTeams || []);
     }
 
     function onRoundEnded(data: {
@@ -170,6 +180,7 @@ export default function PlayPage() {
     }) {
       setState(GameState.RESULTS);
       setHasAnsweredCorrectly(false);
+      clearCorrectAnswers();
       if (data?.players) {
         setPlayers(data.players);
       }
@@ -184,6 +195,7 @@ export default function PlayPage() {
     function onRoundCountdown() {
       setState(GameState.COUNTDOWN);
       setHasAnsweredCorrectly(false);
+      clearCorrectAnswers();
       setSubmittedAnswer(null);
       setAnswer('');
     }
@@ -193,12 +205,20 @@ export default function PlayPage() {
       newScore?: number;
       players?: Player[];
       teamScores?: Team[];
+      correctPlayers?: string[];
+      correctTeams?: string[];
     }) {
       if (data?.players) {
         setPlayers(data.players);
       }
       if (data?.teamScores) {
         setTeams(data.teamScores);
+      }
+      if (data?.correctPlayers) {
+        setCorrectPlayers(data.correctPlayers);
+      }
+      if (data?.correctTeams) {
+        setCorrectTeams(data.correctTeams);
       }
     }
 
@@ -209,6 +229,7 @@ export default function PlayPage() {
     }) {
       setState(GameState.FINISHED);
       setHasAnsweredCorrectly(false);
+      clearCorrectAnswers();
       if (data?.players) {
         setPlayers(data.players);
       }
@@ -220,7 +241,12 @@ export default function PlayPage() {
       }
     }
 
-    function onGoodAnswer(data: { newScore: number; teamScores?: Team[] }) {
+    function onGoodAnswer(data: {
+      newScore: number;
+      teamScores?: Team[];
+      correctPlayers?: string[];
+      correctTeams?: string[];
+    }) {
       console.log(data.newScore);
       setHasAnsweredCorrectly(true);
       if (socket?.id) {
@@ -228,6 +254,12 @@ export default function PlayPage() {
       }
       if (data?.teamScores) {
         setTeams(data.teamScores);
+      }
+      if (data?.correctPlayers) {
+        setCorrectPlayers(data.correctPlayers);
+      }
+      if (data?.correctTeams) {
+        setCorrectTeams(data.correctTeams);
       }
     }
 
@@ -285,6 +317,9 @@ export default function PlayPage() {
     updatePlayer,
     updateScore,
     setCode,
+    setCorrectPlayers,
+    setCorrectTeams,
+    clearCorrectAnswers,
   ]);
 
   // Trouver le joueur courant
@@ -293,6 +328,13 @@ export default function PlayPage() {
   );
 
   const currentTeam = teams.find((t) => t.id === currentPlayer?.teamId);
+
+  const isMyTeamAnswered =
+    gameMode === GameMode.TEAM &&
+    Boolean(currentPlayer?.teamId) &&
+    correctTeams.includes(currentPlayer?.teamId as string);
+
+  const isTeammateAnswered = isMyTeamAnswered && !hasAnsweredCorrectly;
 
   // Écran de saisie du pseudo si non renseigné
   if (!hasJoined) {
@@ -530,6 +572,28 @@ export default function PlayPage() {
                     Bonne réponse !
                   </h3>
                   <p className="text-sm text-green-600 dark:text-green-400 mt-1">
+                    {gameMode === GameMode.TEAM
+                      ? 'Vous avez marqué des points pour votre équipe !'
+                      : 'En attente de la fin de la manche...'}
+                  </p>
+                  <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-2">
+                    En attente de la fin de la manche...
+                  </p>
+                </div>
+              </div>
+            ) : isTeammateAnswered ? (
+              <div className="flex flex-col items-center justify-center p-6 bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-800 rounded-xl text-center gap-3">
+                <div className="w-12 h-12 rounded-full bg-indigo-100 dark:bg-indigo-900/50 flex items-center justify-center text-indigo-600 dark:text-indigo-400 text-2xl font-bold">
+                  👥
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold text-indigo-900 dark:text-indigo-200">
+                    Votre équipe a trouvé la réponse !
+                  </h3>
+                  <p className="text-sm text-indigo-700 dark:text-indigo-300 mt-1">
+                    Un coéquipier a validé la bonne réponse (1 seule bonne réponse par équipe).
+                  </p>
+                  <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-2">
                     En attente de la fin de la manche...
                   </p>
                 </div>
