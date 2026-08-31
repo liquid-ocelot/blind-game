@@ -4,7 +4,7 @@ import { useParams, useRouter } from 'next/navigation';
 import { useSocketStore } from '@/app/store/socketStore';
 import { useEffect, useState } from 'react';
 import { GameState, Player, useGameStore } from '@/app/store/gameStore';
-import { ClientEvents, ServerEvents } from '@blindtest/shared';
+import { ClientEvents, ServerEvents, GameMode, Team, DEFAULT_TEAMS } from '@blindtest/shared';
 import Link from 'next/link';
 
 export default function PlayPage() {
@@ -22,10 +22,16 @@ export default function PlayPage() {
     players,
     setPlayers,
     addPlayer,
+    updatePlayer,
+    setPlayerTeam,
     currentRound,
     setCurrentRound,
     totalRounds,
     setTotalRounds,
+    gameMode,
+    setGameMode,
+    teams,
+    setTeams,
     code,
     setCode,
     updateScore,
@@ -52,13 +58,26 @@ export default function PlayPage() {
     }
   }
 
+  // Choisir une équipe
+  function handleSelectTeam(teamId: string | null) {
+    if (socket && isConnected) {
+      socket.emit(ClientEvents.SELECT_TEAM, {
+        gameCode: codeGame || code,
+        teamId,
+      });
+      if (socket.id) {
+        setPlayerTeam(socket.id, teamId);
+      }
+    }
+  }
+
   // Soumission de réponse lors du jeu
   function handleSendAnswer(e?: React.FormEvent) {
     if (e) e.preventDefault();
     if (!socket || !isConnected || !answer.trim()) return;
 
     socket.emit(ClientEvents.ANSWER, {
-      gameCode:code,
+      gameCode: code || codeGame,
       answer: answer.trim(),
     });
 
@@ -81,11 +100,27 @@ export default function PlayPage() {
   useEffect(() => {
     if (!socket || !isConnected) return;
 
-    function onPlayerJoined(player: { id: string; name: string; score?: number }) {
+    function onPlayerJoined(player: Player) {
       addPlayer(player);
     }
 
-    function onGameStarted(data: { code: string; totalRounds: number; players?: Player[] }) {
+    function onPlayerUpdated(player: Player) {
+      updatePlayer(player.id, player);
+    }
+
+    function onPlayersUpdated(data: { players: Player[] }) {
+      if (data?.players) {
+        setPlayers(data.players);
+      }
+    }
+
+    function onGameStarted(data: {
+      code: string;
+      totalRounds: number;
+      players?: Player[];
+      gameMode?: GameMode;
+      teams?: Team[];
+    }) {
       setState(GameState.COUNTDOWN);
       setHasAnsweredCorrectly(false);
       setSubmittedAnswer(null);
@@ -95,6 +130,12 @@ export default function PlayPage() {
       }
       if (data?.totalRounds) {
         setTotalRounds(data.totalRounds);
+      }
+      if (data?.gameMode) {
+        setGameMode(data.gameMode);
+      }
+      if (data?.teams) {
+        setTeams(data.teams);
       }
       if (data?.players) {
         setPlayers(data.players);
@@ -107,10 +148,14 @@ export default function PlayPage() {
       currentRound: number;
       totalRounds: number;
       duration: number;
+      gameMode?: GameMode;
+      teams?: Team[];
     }) {
       setState(GameState.PLAYING);
       setCurrentRound(data.currentRound);
       setTotalRounds(data.totalRounds);
+      if (data?.gameMode) setGameMode(data.gameMode);
+      if (data?.teams) setTeams(data.teams);
       setTimeLeft(data.duration || 30);
       setSubmittedAnswer(null);
       setAnswer('');
@@ -120,11 +165,19 @@ export default function PlayPage() {
     function onRoundEnded(data: {
       currentRound: number;
       players: Player[];
+      gameMode?: GameMode;
+      teams?: Team[];
     }) {
       setState(GameState.RESULTS);
       setHasAnsweredCorrectly(false);
       if (data?.players) {
         setPlayers(data.players);
+      }
+      if (data?.gameMode) {
+        setGameMode(data.gameMode);
+      }
+      if (data?.teams) {
+        setTeams(data.teams);
       }
     }
 
@@ -135,43 +188,86 @@ export default function PlayPage() {
       setAnswer('');
     }
 
-    function onGameFinished(data: { players: Player[] }) {
+    function onScoreUpdated(data: {
+      playerId?: string;
+      newScore?: number;
+      players?: Player[];
+      teamScores?: Team[];
+    }) {
+      if (data?.players) {
+        setPlayers(data.players);
+      }
+      if (data?.teamScores) {
+        setTeams(data.teamScores);
+      }
+    }
+
+    function onGameFinished(data: {
+      players: Player[];
+      gameMode?: GameMode;
+      teams?: Team[];
+    }) {
       setState(GameState.FINISHED);
       setHasAnsweredCorrectly(false);
       if (data?.players) {
         setPlayers(data.players);
       }
+      if (data?.gameMode) {
+        setGameMode(data.gameMode);
+      }
+      if (data?.teams) {
+        setTeams(data.teams);
+      }
     }
 
-    function onGoodAnswer(data: {newScore : number}) {
+    function onGoodAnswer(data: { newScore: number; teamScores?: Team[] }) {
       console.log(data.newScore);
       setHasAnsweredCorrectly(true);
       if (socket?.id) {
         updateScore(socket.id, data.newScore);
       }
+      if (data?.teamScores) {
+        setTeams(data.teamScores);
+      }
     }
 
-    function onRoomSettingsUpdated(data: { totalRounds: number }) {
+    function onRoomSettingsUpdated(data: {
+      totalRounds?: number;
+      gameMode?: GameMode;
+      teams?: Team[];
+    }) {
       if (data?.totalRounds) {
         setTotalRounds(data.totalRounds);
+      }
+      if (data?.gameMode) {
+        setGameMode(data.gameMode);
+      }
+      if (data?.teams) {
+        setTeams(data.teams);
       }
     }
 
     socket.on(ServerEvents.PLAYER_JOINED, onPlayerJoined);
+    socket.on(ServerEvents.PLAYER_UPDATED, onPlayerUpdated);
+    socket.on(ServerEvents.PLAYERS_UPDATED, onPlayersUpdated);
     socket.on(ServerEvents.GAME_STARTED, onGameStarted);
     socket.on(ServerEvents.ROUND_STARTED, onRoundStarted);
     socket.on(ServerEvents.ROUND_COUNTDOWN, onRoundCountdown);
     socket.on(ServerEvents.ROUND_ENDED, onRoundEnded);
+    socket.on(ServerEvents.SCORE_UPDATED, onScoreUpdated);
     socket.on(ServerEvents.VALID_ANSWER, onGoodAnswer);
     socket.on(ServerEvents.GAME_FINISHED, onGameFinished);
     socket.on(ServerEvents.ROOM_SETTINGS_UPDATED, onRoomSettingsUpdated);
 
     return () => {
       socket.off(ServerEvents.PLAYER_JOINED, onPlayerJoined);
+      socket.off(ServerEvents.PLAYER_UPDATED, onPlayerUpdated);
+      socket.off(ServerEvents.PLAYERS_UPDATED, onPlayersUpdated);
       socket.off(ServerEvents.GAME_STARTED, onGameStarted);
       socket.off(ServerEvents.ROUND_STARTED, onRoundStarted);
       socket.off(ServerEvents.ROUND_COUNTDOWN, onRoundCountdown);
       socket.off(ServerEvents.ROUND_ENDED, onRoundEnded);
+      socket.off(ServerEvents.SCORE_UPDATED, onScoreUpdated);
       socket.off(ServerEvents.VALID_ANSWER, onGoodAnswer);
       socket.off(ServerEvents.GAME_FINISHED, onGameFinished);
       socket.off(ServerEvents.ROOM_SETTINGS_UPDATED, onRoomSettingsUpdated);
@@ -182,15 +278,21 @@ export default function PlayPage() {
     setState,
     setCurrentRound,
     setTotalRounds,
+    setGameMode,
+    setTeams,
     setPlayers,
     addPlayer,
+    updatePlayer,
     updateScore,
+    setCode,
   ]);
 
-  // Trouver le joueur courant pour afficher son score
+  // Trouver le joueur courant
   const currentPlayer = players.find(
     (p) => p.id === socket?.id || (playerName && p.name === playerName)
   );
+
+  const currentTeam = teams.find((t) => t.id === currentPlayer?.teamId);
 
   // Écran de saisie du pseudo si non renseigné
   if (!hasJoined) {
@@ -248,9 +350,19 @@ export default function PlayPage() {
         <div className="flex items-center justify-between border-b border-zinc-200 dark:border-zinc-800 pb-4">
           <div className="flex flex-col">
             <span className="text-xs text-zinc-500 dark:text-zinc-400">Joueur</span>
-            <span className="font-semibold text-zinc-900 dark:text-white text-base">
-              {playerName || inputName}
-            </span>
+            <div className="flex items-center gap-2">
+              <span className="font-semibold text-zinc-900 dark:text-white text-base">
+                {playerName || inputName}
+              </span>
+              {gameMode === GameMode.TEAM && currentTeam && (
+                <span
+                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold text-white shadow-xs"
+                  style={{ backgroundColor: currentTeam.color }}
+                >
+                  {currentTeam.name}
+                </span>
+              )}
+            </div>
           </div>
           <div className="flex flex-col items-end">
             <span className="text-xs text-zinc-500 dark:text-zinc-400">Salon</span>
@@ -262,12 +374,12 @@ export default function PlayPage() {
 
         {/* Phase LOBBY */}
         {state === GameState.LOBBY && (
-          <div className="flex flex-col items-center text-center gap-6 py-6">
+          <div className="flex flex-col items-center text-center gap-6 py-4">
             <div className="w-16 h-16 rounded-full bg-indigo-100 dark:bg-indigo-950 flex items-center justify-center text-indigo-600 dark:text-indigo-400 text-2xl font-bold animate-pulse">
               🎮
             </div>
             <div>
-              <h2 className="text-xl font-bold text-zinc-900 dark:text-white mb-2">
+              <h2 className="text-xl font-bold text-zinc-900 dark:text-white mb-1">
                 Vous êtes dans le salon
               </h2>
               <p className="text-sm text-zinc-500 dark:text-zinc-400">
@@ -275,23 +387,97 @@ export default function PlayPage() {
               </p>
             </div>
 
+            {/* Sélecteur d'équipe si Mode Équipe */}
+            {gameMode === GameMode.TEAM && (
+              <div className="w-full bg-indigo-50/60 dark:bg-indigo-950/30 p-4 rounded-xl border border-indigo-200 dark:border-indigo-900/50 flex flex-col gap-3 text-left">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold uppercase tracking-wider text-indigo-900 dark:text-indigo-300">
+                    Choisissez votre équipe :
+                  </span>
+                  {currentTeam && (
+                    <span
+                      className="text-xs font-bold px-2 py-0.5 rounded-full text-white"
+                      style={{ backgroundColor: currentTeam.color }}
+                    >
+                      {currentTeam.name}
+                    </span>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  {teams.map((team) => {
+                    const isMyTeam = currentPlayer?.teamId === team.id;
+                    const members = players.filter((p) => p.teamId === team.id);
+                    return (
+                      <button
+                        key={team.id}
+                        type="button"
+                        onClick={() => handleSelectTeam(team.id)}
+                        className={`flex flex-col p-3 rounded-lg border transition-all text-left cursor-pointer ${
+                          isMyTeam
+                            ? 'bg-white dark:bg-zinc-900 shadow-md ring-2 ring-offset-1 ring-indigo-500 border-transparent font-bold'
+                            : 'bg-white/80 dark:bg-zinc-900/80 border-zinc-200 dark:border-zinc-700 hover:bg-white dark:hover:bg-zinc-800'
+                        }`}
+                        style={{ borderLeftColor: team.color, borderLeftWidth: '4px' }}
+                      >
+                        <div className="flex items-center justify-between w-full">
+                          <span className="text-sm text-zinc-900 dark:text-white font-semibold flex items-center gap-1.5">
+                            <span
+                              className="w-2.5 h-2.5 rounded-full shrink-0"
+                              style={{ backgroundColor: team.color }}
+                            />
+                            {team.name}
+                          </span>
+                          {isMyTeam && (
+                            <span className="text-xs text-indigo-600 dark:text-indigo-400 font-bold">
+                              ✓ Rejoint
+                            </span>
+                          )}
+                        </div>
+                        <span className="text-[11px] text-zinc-400 mt-1">
+                          {members.length} joueur{members.length > 1 ? 's' : ''}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {!currentPlayer?.teamId && (
+                  <p className="text-[11px] text-zinc-500 dark:text-zinc-400 italic">
+                    💡 Si vous ne choisissez pas d&apos;équipe, vous serez assigné automatiquement.
+                  </p>
+                )}
+              </div>
+            )}
+
             <div className="w-full bg-zinc-50 dark:bg-zinc-800/50 p-4 rounded-lg border border-zinc-200 dark:border-zinc-700/50 flex flex-col gap-3">
               <div className="flex items-center justify-between text-xs font-semibold text-zinc-500 dark:text-zinc-400">
-                <span className="uppercase tracking-wider">Partie configurée</span>
-                <span className="text-indigo-600 dark:text-indigo-400 font-bold">{totalRounds || 5} manches</span>
+                <span className="uppercase tracking-wider">Configuration</span>
+                <span className="text-indigo-600 dark:text-indigo-400 font-bold">
+                  {gameMode === GameMode.TEAM ? `Mode Équipe (${teams.length} éq.)` : 'Mode Solo'} • {totalRounds || 5} manches
+                </span>
               </div>
               <span className="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 block text-left">
                 Joueurs prêts ({players.length})
               </span>
               <div className="flex flex-wrap gap-2 justify-center">
-                {players.map((p) => (
-                  <span
-                    key={p.id}
-                    className="px-3 py-1 rounded-full text-xs font-medium bg-zinc-200 dark:bg-zinc-700 text-zinc-800 dark:text-zinc-200"
-                  >
-                    {p.name}
-                  </span>
-                ))}
+                {players.map((p) => {
+                  const pTeam = teams.find((t) => t.id === p.teamId);
+                  return (
+                    <span
+                      key={p.id}
+                      className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-zinc-200 dark:bg-zinc-700 text-zinc-800 dark:text-zinc-200"
+                    >
+                      {gameMode === GameMode.TEAM && pTeam && (
+                        <span
+                          className="w-2 h-2 rounded-full shrink-0"
+                          style={{ backgroundColor: pTeam.color }}
+                        />
+                      )}
+                      {p.name}
+                    </span>
+                  );
+                })}
               </div>
             </div>
           </div>
@@ -401,13 +587,62 @@ export default function PlayPage() {
                 Fin de la manche {currentRound}
               </h2>
               <p className="text-sm text-zinc-500 dark:text-zinc-400 mt-1">
-                Score actuel : {currentPlayer?.score ?? 0} pts
+                Score personnel : {currentPlayer?.score ?? 0} pts
+                {gameMode === GameMode.TEAM && currentTeam && (
+                  <span className="ml-2 font-bold text-indigo-600 dark:text-indigo-400">
+                    • {currentTeam.name} : {currentTeam.score || 0} pts
+                  </span>
+                )}
               </p>
             </div>
 
+            {/* Classement par équipes si Mode Équipe */}
+            {gameMode === GameMode.TEAM && (
+              <div className="w-full flex flex-col gap-2">
+                <h3 className="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 text-left">
+                  Classement des équipes
+                </h3>
+                <ul className="flex flex-col gap-2 w-full">
+                  {[...teams]
+                    .sort((a, b) => (b.score || 0) - (a.score || 0))
+                    .map((team, idx) => {
+                      const isMyTeam = currentPlayer?.teamId === team.id;
+                      return (
+                        <li
+                          key={team.id}
+                          className={`flex items-center justify-between p-3 rounded-lg border ${
+                            isMyTeam
+                              ? 'bg-indigo-50 dark:bg-indigo-950/40 border-indigo-300 dark:border-indigo-800 font-bold'
+                              : 'bg-zinc-50 dark:bg-zinc-800/60 border-zinc-200 dark:border-zinc-700/60'
+                          }`}
+                          style={{ borderLeftColor: team.color, borderLeftWidth: '4px' }}
+                        >
+                          <div className="flex items-center gap-2.5">
+                            <span className="font-bold text-sm text-zinc-500 w-4">
+                              {idx + 1}.
+                            </span>
+                            <span
+                              className="w-3 h-3 rounded-full shrink-0"
+                              style={{ backgroundColor: team.color }}
+                            />
+                            <span className="font-medium text-zinc-900 dark:text-white">
+                              {team.name} {isMyTeam && '(Votre équipe)'}
+                            </span>
+                          </div>
+                          <span className="font-mono font-bold text-indigo-600 dark:text-indigo-400">
+                            {team.score || 0} pts
+                          </span>
+                        </li>
+                      );
+                    })}
+                </ul>
+              </div>
+            )}
+
+            {/* Classement individuel */}
             <div className="w-full flex flex-col gap-2">
-              <h3 className="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
-                Classement
+              <h3 className="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 text-left">
+                {gameMode === GameMode.TEAM ? 'Scores individuels' : 'Classement'}
               </h3>
               <ul className="flex flex-col gap-2 w-full">
                 {[...players]
@@ -415,6 +650,7 @@ export default function PlayPage() {
                   .map((p, idx) => {
                     const isMe =
                       p.id === socket?.id || (playerName && p.name === playerName);
+                    const pTeam = teams.find((t) => t.id === p.teamId);
                     return (
                       <li
                         key={p.id}
@@ -424,12 +660,19 @@ export default function PlayPage() {
                             : 'bg-zinc-50 dark:bg-zinc-800/60 border-zinc-200 dark:border-zinc-700/60'
                         }`}
                       >
-                        <div className="flex items-center gap-3">
-                          <span className="font-bold text-sm text-zinc-500 w-4">
+                        <div className="flex items-center gap-3 min-w-0">
+                          <span className="font-bold text-sm text-zinc-500 w-4 shrink-0">
                             {idx + 1}.
                           </span>
+                          {gameMode === GameMode.TEAM && pTeam && (
+                            <span
+                              className="w-2.5 h-2.5 rounded-full shrink-0"
+                              style={{ backgroundColor: pTeam.color }}
+                              title={pTeam.name}
+                            />
+                          )}
                           <span
-                            className={`font-medium ${
+                            className={`font-medium truncate ${
                               isMe
                                 ? 'text-indigo-600 dark:text-indigo-400 font-bold'
                                 : 'text-zinc-800 dark:text-zinc-200'
@@ -438,7 +681,7 @@ export default function PlayPage() {
                             {p.name} {isMe && '(Vous)'}
                           </span>
                         </div>
-                        <span className="font-mono font-semibold text-zinc-900 dark:text-white">
+                        <span className="font-mono font-semibold text-zinc-900 dark:text-white shrink-0">
                           {p.score || 0} pts
                         </span>
                       </li>
@@ -459,12 +702,62 @@ export default function PlayPage() {
               </h2>
               <p className="text-sm text-zinc-500 dark:text-zinc-400 mt-1">
                 Votre score final : {currentPlayer?.score ?? 0} pts
+                {gameMode === GameMode.TEAM && currentTeam && (
+                  <span className="ml-2 font-bold text-indigo-600 dark:text-indigo-400">
+                    • {currentTeam.name} : {currentTeam.score || 0} pts
+                  </span>
+                )}
               </p>
             </div>
 
+            {/* Podium Équipes si Mode Équipe */}
+            {gameMode === GameMode.TEAM && (
+              <div className="w-full flex flex-col gap-2">
+                <h3 className="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 text-left">
+                  Podium des équipes
+                </h3>
+                <ul className="flex flex-col gap-2 w-full">
+                  {[...teams]
+                    .sort((a, b) => (b.score || 0) - (a.score || 0))
+                    .map((team, idx) => {
+                      const isMyTeam = currentPlayer?.teamId === team.id;
+                      return (
+                        <li
+                          key={team.id}
+                          className={`flex items-center justify-between p-3.5 rounded-xl border ${
+                            idx === 0
+                              ? 'bg-amber-50 dark:bg-amber-950/30 border-amber-300 dark:border-amber-800'
+                              : isMyTeam
+                              ? 'bg-indigo-50 dark:bg-indigo-950/40 border-indigo-300 dark:border-indigo-800'
+                              : 'bg-zinc-50 dark:bg-zinc-800/60 border-zinc-200 dark:border-zinc-700/60'
+                          }`}
+                          style={{ borderLeftColor: team.color, borderLeftWidth: '5px' }}
+                        >
+                          <div className="flex items-center gap-3">
+                            <span className="text-lg">
+                              {idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : `${idx + 1}.`}
+                            </span>
+                            <span
+                              className="w-3 h-3 rounded-full shrink-0"
+                              style={{ backgroundColor: team.color }}
+                            />
+                            <span className="font-bold text-zinc-900 dark:text-white">
+                              {team.name} {isMyTeam && '(Votre équipe)'}
+                            </span>
+                          </div>
+                          <span className="font-mono font-bold text-indigo-600 dark:text-indigo-400">
+                            {team.score || 0} pts
+                          </span>
+                        </li>
+                      );
+                    })}
+                </ul>
+              </div>
+            )}
+
             <div className="w-full flex flex-col gap-2">
               <h3 className="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 text-left">
-                Classement final
+                {gameMode === GameMode.TEAM ? 'Classement individuel' : 'Classement final'}
               </h3>
               <ul className="flex flex-col gap-2 w-full">
                 {[...players]
@@ -472,23 +765,31 @@ export default function PlayPage() {
                   .map((p, idx) => {
                     const isMe =
                       p.id === socket?.id || (playerName && p.name === playerName);
+                    const pTeam = teams.find((t) => t.id === p.teamId);
                     return (
                       <li
                         key={p.id}
                         className={`flex items-center justify-between p-3 rounded-lg border ${
-                          idx === 0
+                          idx === 0 && gameMode === GameMode.SOLO
                             ? 'bg-amber-50 dark:bg-amber-950/30 border-amber-300 dark:border-amber-800'
                             : isMe
                             ? 'bg-indigo-50 dark:bg-indigo-950/40 border-indigo-300 dark:border-indigo-800'
                             : 'bg-zinc-50 dark:bg-zinc-800/60 border-zinc-200 dark:border-zinc-700/60'
                         }`}
                       >
-                        <div className="flex items-center gap-3">
-                          <span className="font-bold text-sm text-zinc-500 w-4">
+                        <div className="flex items-center gap-3 min-w-0">
+                          <span className="font-bold text-sm text-zinc-500 w-4 shrink-0">
                             {idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : `${idx + 1}.`}
                           </span>
+                          {gameMode === GameMode.TEAM && pTeam && (
+                            <span
+                              className="w-2.5 h-2.5 rounded-full shrink-0"
+                              style={{ backgroundColor: pTeam.color }}
+                              title={pTeam.name}
+                            />
+                          )}
                           <span
-                            className={`font-medium ${
+                            className={`font-medium truncate ${
                               isMe
                                 ? 'text-indigo-600 dark:text-indigo-400 font-bold'
                                 : 'text-zinc-800 dark:text-zinc-200'
@@ -497,7 +798,7 @@ export default function PlayPage() {
                             {p.name} {isMe && '(Vous)'}
                           </span>
                         </div>
-                        <span className="font-mono font-semibold text-zinc-900 dark:text-white">
+                        <span className="font-mono font-semibold text-zinc-900 dark:text-white shrink-0">
                           {p.score || 0} pts
                         </span>
                       </li>

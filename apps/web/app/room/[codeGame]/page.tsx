@@ -4,7 +4,7 @@ import { useParams } from 'next/navigation';
 import { useSocketStore } from "@/app/store/socketStore";
 import { useEffect, useRef, useState, useCallback } from "react";
 import { GameState, Player, useGameStore } from "@/app/store/gameStore";
-import { ClientEvents, ServerEvents } from "@blindtest/shared";
+import { ClientEvents, ServerEvents, GameMode, Team, DEFAULT_TEAMS } from "@blindtest/shared";
 import { getApiUrl } from "@/lib/socket";
 
 export interface MusicTrack {
@@ -27,10 +27,16 @@ export default function RoomPage() {
     players,
     setPlayers,
     addPlayer,
+    updatePlayer,
+    setPlayerTeam,
     currentRound,
     setCurrentRound,
     totalRounds,
     setTotalRounds,
+    gameMode,
+    setGameMode,
+    teams,
+    setTeams,
     setCode,
   } = useGameStore();
 
@@ -259,6 +265,46 @@ export default function RoomPage() {
       socket.emit(ClientEvents.UPDATE_SETTINGS, {
         gameCode: codeGame,
         totalRounds: clamped,
+        gameMode,
+        teams,
+      });
+    }
+  };
+
+  // Modification du mode de jeu (réservé au maître de jeu)
+  const handleGameModeChange = (newMode: GameMode) => {
+    setGameMode(newMode);
+    if (socket && isConnected && isMasterUser) {
+      socket.emit(ClientEvents.UPDATE_SETTINGS, {
+        gameCode: codeGame,
+        totalRounds,
+        gameMode: newMode,
+        teams,
+      });
+    }
+  };
+
+  // Modification du nombre d'équipes (réservé au maître de jeu)
+  const handleTeamCountChange = (count: number) => {
+    const clampedCount = Math.max(2, Math.min(4, count));
+    const newTeams = DEFAULT_TEAMS.slice(0, clampedCount);
+    setTeams(newTeams);
+    if (socket && isConnected && isMasterUser) {
+      socket.emit(ClientEvents.UPDATE_SETTINGS, {
+        gameCode: codeGame,
+        totalRounds,
+        gameMode,
+        teams: newTeams,
+      });
+    }
+  };
+
+  // Sélection d'équipe pour un joueur
+  const handleSelectTeam = (teamId: string | null) => {
+    if (socket && isConnected) {
+      socket.emit(ClientEvents.SELECT_TEAM, {
+        gameCode: codeGame,
+        teamId,
       });
     }
   };
@@ -286,8 +332,18 @@ export default function RoomPage() {
   useEffect(() => {
     if (!socket || !isConnected) return;
 
-    function onPlayerJoined(player: { id: string; name: string; score?: number }) {
+    function onPlayerJoined(player: Player) {
       addPlayer(player);
+    }
+
+    function onPlayerUpdated(player: Player) {
+      updatePlayer(player.id, player);
+    }
+
+    function onPlayersUpdated(data: { players: Player[] }) {
+      if (data?.players) {
+        setPlayers(data.players);
+      }
     }
 
     function onGameStarted(data: {
@@ -295,10 +351,14 @@ export default function RoomPage() {
       totalRounds: number;
       tracks?: MusicTrack[];
       players?: Player[];
+      gameMode?: GameMode;
+      teams?: Team[];
     }) {
       setState(GameState.COUNTDOWN);
       if (data?.code) setCode(data.code);
       if (data?.totalRounds) setTotalRounds(data.totalRounds);
+      if (data?.gameMode) setGameMode(data.gameMode);
+      if (data?.teams) setTeams(data.teams);
       if (data?.tracks && data.tracks.length > 0) {
         setTracks(data.tracks);
       }
@@ -317,10 +377,14 @@ export default function RoomPage() {
       track?: MusicTrack;
       musicUrl?: string;
       startTime?: number;
+      gameMode?: GameMode;
+      teams?: Team[];
     }) {
       setState(GameState.PLAYING);
       setCurrentRound(data.currentRound);
       setTotalRounds(data.totalRounds);
+      if (data?.gameMode) setGameMode(data.gameMode);
+      if (data?.teams) setTeams(data.teams);
       setTimeLeft(data.duration || 30);
       setShowTitle(false);
 
@@ -345,6 +409,8 @@ export default function RoomPage() {
       currentRound: number;
       players: Player[];
       track?: MusicTrack;
+      gameMode?: GameMode;
+      teams?: Team[];
     }) {
       setState(GameState.RESULTS);
       if (data?.players) {
@@ -353,6 +419,12 @@ export default function RoomPage() {
       if (data?.track) {
         setActiveTrack(data.track);
       }
+      if (data?.gameMode) {
+        setGameMode(data.gameMode);
+      }
+      if (data?.teams) {
+        setTeams(data.teams);
+      }
     }
 
     function onRoundCountdown() {
@@ -360,34 +432,74 @@ export default function RoomPage() {
       stopAudio();
     }
 
-    function onGameFinished(data: { players: Player[] }) {
+    function onScoreUpdated(data: {
+      playerId?: string;
+      newScore?: number;
+      players?: Player[];
+      teamScores?: Team[];
+    }) {
+      if (data?.players) {
+        setPlayers(data.players);
+      }
+      if (data?.teamScores) {
+        setTeams(data.teamScores);
+      }
+    }
+
+    function onGameFinished(data: {
+      players: Player[];
+      gameMode?: GameMode;
+      teams?: Team[];
+    }) {
       setState(GameState.FINISHED);
       stopAudio();
       if (data?.players) {
         setPlayers(data.players);
       }
+      if (data?.gameMode) {
+        setGameMode(data.gameMode);
+      }
+      if (data?.teams) {
+        setTeams(data.teams);
+      }
     }
 
-    function onRoomSettingsUpdated(data: { totalRounds: number }) {
+    function onRoomSettingsUpdated(data: {
+      totalRounds?: number;
+      gameMode?: GameMode;
+      teams?: Team[];
+    }) {
       if (data?.totalRounds) {
         setTotalRounds(data.totalRounds);
+      }
+      if (data?.gameMode) {
+        setGameMode(data.gameMode);
+      }
+      if (data?.teams) {
+        setTeams(data.teams);
       }
     }
 
     socket.on(ServerEvents.PLAYER_JOINED, onPlayerJoined);
+    socket.on(ServerEvents.PLAYER_UPDATED, onPlayerUpdated);
+    socket.on(ServerEvents.PLAYERS_UPDATED, onPlayersUpdated);
     socket.on(ServerEvents.GAME_STARTED, onGameStarted);
     socket.on(ServerEvents.ROUND_STARTED, onRoundStarted);
     socket.on(ServerEvents.ROUND_COUNTDOWN, onRoundCountdown);
     socket.on(ServerEvents.ROUND_ENDED, onRoundEnded);
+    socket.on(ServerEvents.SCORE_UPDATED, onScoreUpdated);
     socket.on(ServerEvents.GAME_FINISHED, onGameFinished);
     socket.on(ServerEvents.ROOM_SETTINGS_UPDATED, onRoomSettingsUpdated);
 
     return () => {
       socket.off(ServerEvents.PLAYER_JOINED, onPlayerJoined);
+      socket.off(ServerEvents.PLAYER_UPDATED, onPlayerUpdated);
+      socket.off(ServerEvents.PLAYERS_UPDATED, onPlayersUpdated);
       socket.off(ServerEvents.GAME_STARTED, onGameStarted);
       socket.off(ServerEvents.ROUND_STARTED, onRoundStarted);
       socket.off(ServerEvents.ROUND_COUNTDOWN, onRoundCountdown);
       socket.off(ServerEvents.ROUND_ENDED, onRoundEnded);
+      socket.off(ServerEvents.SCORE_UPDATED, onScoreUpdated);
       socket.off(ServerEvents.GAME_FINISHED, onGameFinished);
       socket.off(ServerEvents.ROOM_SETTINGS_UPDATED, onRoomSettingsUpdated);
     };
@@ -397,8 +509,11 @@ export default function RoomPage() {
     setState,
     setPlayers,
     addPlayer,
+    updatePlayer,
     setCurrentRound,
     setTotalRounds,
+    setGameMode,
+    setTeams,
     setCode,
     playTrack,
     stopAudio,
@@ -592,31 +707,98 @@ export default function RoomPage() {
               )}
             </div>
 
+            {/* Classement par équipes si Mode Équipe */}
+            {gameMode === GameMode.TEAM && (
+              <div className="w-full max-w-md px-4 mt-2">
+                <h3 className="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 mb-3 flex items-center justify-between">
+                  <span>🏆 Classement des équipes</span>
+                  <span className="text-[10px] bg-indigo-100 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300 px-2 py-0.5 rounded-full font-bold">
+                    Mode Équipe
+                  </span>
+                </h3>
+                <ul className="flex flex-col gap-2.5">
+                  {[...teams]
+                    .sort((a, b) => (b.score || 0) - (a.score || 0))
+                    .map((team, idx) => {
+                      const teamMembers = players.filter((p) => p.teamId === team.id);
+                      return (
+                        <li
+                          key={team.id}
+                          className="flex flex-col p-3 bg-white dark:bg-zinc-900 rounded-xl border border-zinc-200 dark:border-zinc-700 shadow-sm"
+                          style={{ borderLeftColor: team.color, borderLeftWidth: '4px' }}
+                        >
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2.5">
+                              <span className="font-bold text-sm text-zinc-500 w-5">
+                                {idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : `${idx + 1}.`}
+                              </span>
+                              <span
+                                className="w-3 h-3 rounded-full shrink-0"
+                                style={{ backgroundColor: team.color }}
+                              />
+                              <span className="font-bold text-zinc-900 dark:text-white">
+                                {team.name}
+                              </span>
+                            </div>
+                            <span className="font-mono font-bold text-indigo-600 dark:text-indigo-400 text-base">
+                              {team.score || 0} pts
+                            </span>
+                          </div>
+                          {teamMembers.length > 0 && (
+                            <div className="flex flex-wrap gap-1.5 mt-2 pt-2 border-t border-zinc-100 dark:border-zinc-800 text-xs text-zinc-500 dark:text-zinc-400">
+                              {teamMembers.map((m) => (
+                                <span
+                                  key={m.id}
+                                  className="px-2 py-0.5 rounded-md bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300"
+                                >
+                                  {m.name} <span className="font-mono text-[10px] text-zinc-400">({m.score || 0}p)</span>
+                                </span>
+                              ))}
+                            </div>
+                          )}
+                        </li>
+                      );
+                    })}
+                </ul>
+              </div>
+            )}
+
+            {/* Classement individuel */}
             <div className="w-full max-w-md px-4 mt-2">
               <h3 className="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 mb-3">
-                Classement provisoire
+                {gameMode === GameMode.TEAM ? 'Scores individuels' : 'Classement provisoire'}
               </h3>
               <ul className="flex flex-col gap-2">
                 {[...players]
                   .sort((a, b) => (b.score || 0) - (a.score || 0))
-                  .map((player, idx) => (
-                    <li
-                      key={player.id}
-                      className="flex items-center justify-between p-3 bg-white dark:bg-zinc-900 rounded-lg border border-zinc-200 dark:border-zinc-700"
-                    >
-                      <div className="flex items-center gap-3">
-                        <span className="font-bold text-sm text-zinc-500 w-4">
-                          {idx + 1}.
+                  .map((player, idx) => {
+                    const playerTeam = teams.find((t) => t.id === player.teamId);
+                    return (
+                      <li
+                        key={player.id}
+                        className="flex items-center justify-between p-3 bg-white dark:bg-zinc-900 rounded-lg border border-zinc-200 dark:border-zinc-700"
+                      >
+                        <div className="flex items-center gap-3 min-w-0">
+                          <span className="font-bold text-sm text-zinc-500 w-4 shrink-0">
+                            {idx + 1}.
+                          </span>
+                          {gameMode === GameMode.TEAM && playerTeam && (
+                            <span
+                              className="w-2.5 h-2.5 rounded-full shrink-0"
+                              style={{ backgroundColor: playerTeam.color }}
+                              title={playerTeam.name}
+                            />
+                          )}
+                          <span className="font-medium text-zinc-800 dark:text-zinc-200 truncate">
+                            {player.name}
+                          </span>
+                        </div>
+                        <span className="font-mono font-bold text-indigo-600 dark:text-indigo-400 shrink-0">
+                          {player.score || 0} pts
                         </span>
-                        <span className="font-medium text-zinc-800 dark:text-zinc-200">
-                          {player.name}
-                        </span>
-                      </div>
-                      <span className="font-mono font-bold text-indigo-600 dark:text-indigo-400">
-                        {player.score || 0} pts
-                      </span>
-                    </li>
-                  ))}
+                      </li>
+                    );
+                  })}
               </ul>
             </div>
           </div>
@@ -635,35 +817,105 @@ export default function RoomPage() {
               </p>
             </div>
 
+            {/* Podium Équipes si Mode Équipe */}
+            {gameMode === GameMode.TEAM && (
+              <div className="w-full max-w-md px-4">
+                <h3 className="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 mb-3 text-left flex items-center justify-between">
+                  <span>🏆 Podium des équipes</span>
+                  <span className="text-[10px] bg-indigo-100 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300 px-2 py-0.5 rounded-full font-bold">
+                    Mode Équipe
+                  </span>
+                </h3>
+                <ul className="flex flex-col gap-2.5">
+                  {[...teams]
+                    .sort((a, b) => (b.score || 0) - (a.score || 0))
+                    .map((team, idx) => {
+                      const teamMembers = players.filter((p) => p.teamId === team.id);
+                      return (
+                        <li
+                          key={team.id}
+                          className={`flex flex-col p-3.5 rounded-xl border text-left ${
+                            idx === 0
+                              ? 'bg-amber-50/60 dark:bg-amber-950/30 border-amber-300 dark:border-amber-800 shadow-md'
+                              : 'bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-700'
+                          }`}
+                          style={{ borderLeftColor: team.color, borderLeftWidth: '5px' }}
+                        >
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-3">
+                              <span className="text-xl">
+                                {idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : `${idx + 1}.`}
+                              </span>
+                              <span
+                                className="w-3.5 h-3.5 rounded-full shrink-0"
+                                style={{ backgroundColor: team.color }}
+                              />
+                              <span className="font-bold text-zinc-900 dark:text-white text-base">
+                                {team.name}
+                              </span>
+                            </div>
+                            <span className="font-mono font-black text-indigo-600 dark:text-indigo-400 text-lg">
+                              {team.score || 0} pts
+                            </span>
+                          </div>
+                          {teamMembers.length > 0 && (
+                            <div className="flex flex-wrap gap-1.5 mt-2.5 pt-2 border-t border-zinc-100 dark:border-zinc-800/80 text-xs text-zinc-500 dark:text-zinc-400">
+                              {teamMembers.map((m) => (
+                                <span
+                                  key={m.id}
+                                  className="px-2 py-0.5 rounded-md bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300"
+                                >
+                                  {m.name} <span className="font-mono text-[10px] text-zinc-400">({m.score || 0} pts)</span>
+                                </span>
+                              ))}
+                            </div>
+                          )}
+                        </li>
+                      );
+                    })}
+                </ul>
+              </div>
+            )}
+
             <div className="w-full max-w-md px-4">
               <h3 className="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 mb-3 text-left">
-                Podium final
+                {gameMode === GameMode.TEAM ? 'Classement individuel' : 'Podium final'}
               </h3>
               <ul className="flex flex-col gap-2">
                 {[...players]
                   .sort((a, b) => (b.score || 0) - (a.score || 0))
-                  .map((player, idx) => (
-                    <li
-                      key={player.id}
-                      className={`flex items-center justify-between p-3 rounded-lg border ${
-                        idx === 0
-                          ? 'bg-amber-50 dark:bg-amber-950/40 border-amber-300 dark:border-amber-800 font-bold'
-                          : 'bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-700'
-                      }`}
-                    >
-                      <div className="flex items-center gap-3">
-                        <span className="text-lg">
-                          {idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : `${idx + 1}.`}
+                  .map((player, idx) => {
+                    const playerTeam = teams.find((t) => t.id === player.teamId);
+                    return (
+                      <li
+                        key={player.id}
+                        className={`flex items-center justify-between p-3 rounded-lg border ${
+                          idx === 0 && gameMode === GameMode.SOLO
+                            ? 'bg-amber-50 dark:bg-amber-950/40 border-amber-300 dark:border-amber-800 font-bold'
+                            : 'bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-700'
+                        }`}
+                      >
+                        <div className="flex items-center gap-3 min-w-0">
+                          <span className="text-base shrink-0">
+                            {idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : `${idx + 1}.`}
+                          </span>
+                          {gameMode === GameMode.TEAM && playerTeam && (
+                            <span
+                              className="w-2.5 h-2.5 rounded-full shrink-0"
+                              style={{ backgroundColor: playerTeam.color }}
+                              title={playerTeam.name}
+                            />
+                          )}
+                          <span className="text-zinc-900 dark:text-white truncate">
+                            {player.name}
+                          </span>
+                        </div>
+                        <span className="font-mono font-bold text-indigo-600 dark:text-indigo-400 shrink-0">
+                          {player.score || 0} pts
                         </span>
-                        <span className="text-zinc-900 dark:text-white">
-                          {player.name}
-                        </span>
-                      </div>
-                      <span className="font-mono font-bold text-indigo-600 dark:text-indigo-400">
-                        {player.score || 0} pts
-                      </span>
-                    </li>
-                  ))}
+                      </li>
+                    );
+                  })}
               </ul>
             </div>
 
@@ -684,9 +936,9 @@ export default function RoomPage() {
           </div>
         )}
 
-        {/* Section Configuration de la room (Nombre de manches) */}
+        {/* Section Configuration de la room (Nombre de manches & Mode de jeu) */}
         {state === GameState.LOBBY && (
-          <div className="flex flex-col gap-4 p-5 bg-zinc-50 dark:bg-zinc-800/50 rounded-xl border border-zinc-200 dark:border-zinc-700">
+          <div className="flex flex-col gap-5 p-5 bg-zinc-50 dark:bg-zinc-800/50 rounded-xl border border-zinc-200 dark:border-zinc-700">
             <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
               <div>
                 <h2 className="text-base font-bold text-zinc-900 dark:text-white flex items-center gap-2">
@@ -694,23 +946,123 @@ export default function RoomPage() {
                 </h2>
                 <p className="text-xs text-zinc-500 dark:text-zinc-400">
                   {isMasterUser
-                    ? 'Choisissez le nombre de manches par partie (entre 5 et 20).'
-                    : 'Nombre de manches configuré par l’hôte pour cette partie.'}
+                    ? 'Configurez le mode de jeu, les équipes et le nombre de manches.'
+                    : 'Paramètres configurés par l’hôte pour cette partie.'}
                 </p>
               </div>
 
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-semibold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">
-                  Manches :
+              <div className="flex items-center gap-3">
+                <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-white dark:bg-zinc-900 rounded-lg border border-zinc-200 dark:border-zinc-700 text-xs font-bold text-indigo-600 dark:text-indigo-400 shadow-sm">
+                  {gameMode === GameMode.TEAM ? '👥 Mode Équipes' : '👤 Mode Solo'}
                 </span>
                 <span className="text-xl font-mono font-black text-indigo-600 dark:text-indigo-400 px-3 py-1 bg-white dark:bg-zinc-900 rounded-lg border border-zinc-200 dark:border-zinc-700 shadow-sm">
-                  {totalRounds || 5}
+                  {totalRounds || 5} manches
                 </span>
               </div>
             </div>
 
+            {/* Mode de jeu : Solo ou Équipes */}
+            <div className="flex flex-col gap-2 pt-2 border-t border-zinc-200 dark:border-zinc-700/80">
+              <span className="text-xs font-semibold text-zinc-600 dark:text-zinc-300 uppercase tracking-wider">
+                Mode de jeu :
+              </span>
+              {isMasterUser ? (
+                <div className="grid grid-cols-2 gap-3">
+                  <button
+                    type="button"
+                    onClick={() => handleGameModeChange(GameMode.SOLO)}
+                    className={`flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl text-sm font-semibold transition-all cursor-pointer ${
+                      gameMode === GameMode.SOLO
+                        ? 'bg-indigo-600 text-white shadow-md shadow-indigo-500/20 ring-2 ring-indigo-500 ring-offset-1'
+                        : 'bg-white dark:bg-zinc-900 text-zinc-700 dark:text-zinc-300 border border-zinc-300 dark:border-zinc-700 hover:bg-zinc-100 dark:hover:bg-zinc-800'
+                    }`}
+                  >
+                    <span>👤</span> Solo (Chacun pour soi)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleGameModeChange(GameMode.TEAM)}
+                    className={`flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl text-sm font-semibold transition-all cursor-pointer ${
+                      gameMode === GameMode.TEAM
+                        ? 'bg-indigo-600 text-white shadow-md shadow-indigo-500/20 ring-2 ring-indigo-500 ring-offset-1'
+                        : 'bg-white dark:bg-zinc-900 text-zinc-700 dark:text-zinc-300 border border-zinc-300 dark:border-zinc-700 hover:bg-zinc-100 dark:hover:bg-zinc-800'
+                    }`}
+                  >
+                    <span>👥</span> Par Équipe
+                  </button>
+                </div>
+              ) : (
+                <p className="text-xs text-zinc-500 dark:text-zinc-400">
+                  Mode sélectionné : <strong className="text-zinc-700 dark:text-zinc-200">{gameMode === GameMode.TEAM ? 'Par Équipe' : 'Solo'}</strong>
+                </p>
+              )}
+            </div>
+
+            {/* Paramètres spécifiques au Mode Équipe */}
+            {gameMode === GameMode.TEAM && (
+              <div className="flex flex-col gap-3 p-3.5 bg-indigo-50/60 dark:bg-indigo-950/20 rounded-xl border border-indigo-200/80 dark:border-indigo-900/40">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                  <span className="text-xs font-bold text-indigo-900 dark:text-indigo-300 uppercase tracking-wider">
+                    Nombre d&apos;équipes :
+                  </span>
+                  {isMasterUser ? (
+                    <div className="flex items-center gap-2">
+                      {[2, 3, 4].map((count) => (
+                        <button
+                          key={count}
+                          type="button"
+                          onClick={() => handleTeamCountChange(count)}
+                          className={`px-3 py-1 rounded-lg text-xs font-bold transition-colors cursor-pointer ${
+                            teams.length === count
+                              ? 'bg-indigo-600 text-white shadow-sm'
+                              : 'bg-white dark:bg-zinc-900 border border-zinc-300 dark:border-zinc-700 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800'
+                          }`}
+                        >
+                          {count} équipes
+                        </button>
+                      ))}
+                    </div>
+                  ) : (
+                    <span className="text-xs font-semibold text-zinc-700 dark:text-zinc-300">
+                      {teams.length} équipes
+                    </span>
+                  )}
+                </div>
+
+                {/* Badges des équipes configurées */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1">
+                  {teams.map((team) => {
+                    const memberCount = players.filter((p) => p.teamId === team.id).length;
+                    return (
+                      <div
+                        key={team.id}
+                        className="flex items-center gap-2 p-2 rounded-lg bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 text-xs shadow-xs"
+                      >
+                        <span
+                          className="w-3.5 h-3.5 rounded-full shrink-0"
+                          style={{ backgroundColor: team.color }}
+                        />
+                        <div className="truncate">
+                          <p className="font-bold text-zinc-900 dark:text-white truncate">
+                            {team.name}
+                          </p>
+                          <span className="text-[10px] text-zinc-400">
+                            {memberCount} joueur{memberCount > 1 ? 's' : ''}
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* Réglage du nombre de manches */}
             {isMasterUser && (
               <div className="flex flex-col gap-3 pt-2 border-t border-zinc-200 dark:border-zinc-700/80">
+                <span className="text-xs font-semibold text-zinc-600 dark:text-zinc-300 uppercase tracking-wider">
+                  Nombre de manches :
+                </span>
                 <div className="flex items-center gap-4">
                   <button
                     type="button"
@@ -905,27 +1257,114 @@ export default function RoomPage() {
           </div>
         )}
 
-        {/* Section Joueurs connectés */}
+        {/* Section Joueurs connectés (Solo vs Équipes) */}
         <div className="w-full">
-          <h2 className="text-lg font-semibold text-zinc-900 dark:text-white mb-3 flex items-center gap-2">
-            <span>👥</span> Joueurs connectés ({players.length})
-          </h2>
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-lg font-semibold text-zinc-900 dark:text-white flex items-center gap-2">
+              <span>👥</span> Joueurs connectés ({players.length})
+            </h2>
+            {gameMode === GameMode.TEAM && (
+              <span className="text-xs text-indigo-600 dark:text-indigo-400 font-medium">
+                Répartition par équipe
+              </span>
+            )}
+          </div>
+
           {players.length > 0 ? (
-            <ul className="grid grid-cols-1 sm:grid-cols-2 gap-2 w-full">
-              {players.map((player) => (
-                <li
-                  key={player.id}
-                  className="flex items-center gap-3 p-3 bg-zinc-50 dark:bg-zinc-800 rounded-lg border border-zinc-200 dark:border-zinc-700"
-                >
-                  <div className="w-8 h-8 rounded-full bg-indigo-100 dark:bg-indigo-900 flex items-center justify-center text-indigo-600 dark:text-indigo-400 font-bold text-sm">
-                    {player.name.charAt(0).toUpperCase()}
+            gameMode === GameMode.TEAM ? (
+              <div className="flex flex-col gap-4 w-full">
+                {/* Grille des équipes */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 w-full">
+                  {teams.map((team) => {
+                    const teamMembers = players.filter((p) => p.teamId === team.id);
+                    return (
+                      <div
+                        key={team.id}
+                        className="flex flex-col p-4 bg-zinc-50 dark:bg-zinc-800/60 rounded-xl border border-zinc-200 dark:border-zinc-700 shadow-sm"
+                        style={{ borderTopColor: team.color, borderTopWidth: '4px' }}
+                      >
+                        <div className="flex items-center justify-between pb-2 border-b border-zinc-200 dark:border-zinc-700">
+                          <div className="flex items-center gap-2">
+                            <span
+                              className="w-3.5 h-3.5 rounded-full shrink-0 shadow-xs"
+                              style={{ backgroundColor: team.color }}
+                            />
+                            <span className="font-bold text-zinc-900 dark:text-white text-sm">
+                              {team.name}
+                            </span>
+                          </div>
+                          <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300">
+                            {teamMembers.length} joueur{teamMembers.length > 1 ? 's' : ''}
+                          </span>
+                        </div>
+
+                        {/* Liste des joueurs de l'équipe */}
+                        <div className="flex flex-col gap-1.5 mt-3 min-h-[60px]">
+                          {teamMembers.length > 0 ? (
+                            teamMembers.map((member) => (
+                              <div
+                                key={member.id}
+                                className="flex items-center justify-between p-2 rounded-lg bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 text-xs"
+                              >
+                                <span className="font-medium text-zinc-800 dark:text-zinc-200 truncate">
+                                  {member.name}
+                                </span>
+                              </div>
+                            ))
+                          ) : (
+                            <p className="text-xs text-zinc-400 italic py-2 text-center">
+                              Aucun joueur dans cette équipe
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* Section des joueurs sans équipe */}
+                {players.some((p) => !p.teamId) && (
+                  <div className="p-3 bg-amber-50/70 dark:bg-amber-950/20 rounded-xl border border-amber-200 dark:border-amber-900/40 flex flex-col gap-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-amber-800 dark:text-amber-300 flex items-center gap-1.5">
+                        <span>⚠️</span> Joueurs sans équipe ({players.filter((p) => !p.teamId).length})
+                      </span>
+                      <span className="text-[11px] text-amber-700 dark:text-amber-400">
+                        (Répartition automatique au lancement)
+                      </span>
+                    </div>
+                    <div className="flex flex-wrap gap-1.5">
+                      {players
+                        .filter((p) => !p.teamId)
+                        .map((p) => (
+                          <span
+                            key={p.id}
+                            className="px-2.5 py-1 rounded-lg text-xs font-medium bg-white dark:bg-zinc-900 border border-amber-200 dark:border-amber-800 text-zinc-800 dark:text-zinc-200 shadow-xs"
+                          >
+                            {p.name}
+                          </span>
+                        ))}
+                    </div>
                   </div>
-                  <span className="text-zinc-700 dark:text-zinc-200 font-medium truncate">
-                    {player.name}
-                  </span>
-                </li>
-              ))}
-            </ul>
+                )}
+              </div>
+            ) : (
+              <ul className="grid grid-cols-1 sm:grid-cols-2 gap-2 w-full">
+                {players.map((player) => (
+                  <li
+                    key={player.id}
+                    className="flex items-center gap-3 p-3 bg-zinc-50 dark:bg-zinc-800 rounded-lg border border-zinc-200 dark:border-zinc-700"
+                  >
+                    <div className="w-8 h-8 rounded-full bg-indigo-100 dark:bg-indigo-900 flex items-center justify-center text-indigo-600 dark:text-indigo-400 font-bold text-sm">
+                      {player.name.charAt(0).toUpperCase()}
+                    </div>
+                    <span className="text-zinc-700 dark:text-zinc-200 font-medium truncate">
+                      {player.name}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )
           ) : (
             <p className="text-sm text-zinc-400 italic">
               En attente de joueurs...

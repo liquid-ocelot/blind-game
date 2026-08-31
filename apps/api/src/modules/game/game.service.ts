@@ -3,7 +3,7 @@ import { GameSessionManager } from './game-session.manager';
 import { Server, Socket } from 'socket.io';
 import { GameSession } from './game-session';
 import { GameState } from './game-state';
-import { ServerEvents } from '@blindtest/shared';
+import { ServerEvents, GameMode, Team, Player } from '@blindtest/shared';
 import { MusicService, MusicTrack } from './music.service';
 
 @Injectable()
@@ -29,7 +29,7 @@ export class GameService {
 
   updateRoomSettings(
     code: string,
-    settings: { totalRounds?: number },
+    settings: { totalRounds?: number; gameMode?: GameMode; teams?: Team[] },
     clientId: string,
   ) {
     const game = this.gameSessionManager.getGame(code);
@@ -46,8 +46,26 @@ export class GameService {
     if (typeof settings.totalRounds === 'number') {
       game.setTotalRounds(settings.totalRounds);
     }
+    if (settings.gameMode) {
+      game.setGameMode(settings.gameMode);
+    }
+    if (settings.teams) {
+      game.setTeams(settings.teams);
+    }
 
     return game;
+  }
+
+  selectTeam(code: string, playerId: string, teamId: string | null): Player | null {
+    const game = this.gameSessionManager.getGame(code);
+    if (!game || game.state !== GameState.LOBBY) {
+      return null;
+    }
+    const success = game.assignPlayerToTeam(playerId, teamId);
+    if (success) {
+      return game.players.find((p) => p.id === playerId) || null;
+    }
+    return null;
   }
 
   startGame(code: string) {
@@ -108,7 +126,17 @@ export class GameService {
 
     game.recordCorrectAnswer(client.id);
 
-    client.emit(ServerEvents.VALID_ANSWER, { newScore });
+    const teamScores = game.getTeamScores();
+
+    client.emit(ServerEvents.VALID_ANSWER, { newScore, teamScores });
+
+    const room = `game:${game.code}`;
+    this.server?.to(room).emit(ServerEvents.SCORE_UPDATED, {
+      playerId: player?.id,
+      newScore,
+      players: game.players,
+      teamScores,
+    });
 
     if (game.haveAllPlayersAnswered()) {
       game.endRoundEarly();
@@ -137,6 +165,9 @@ export class GameService {
       game.resetGame();
     }
 
+    // Auto-assigner les joueurs restants si mode équipe
+    game.autoAssignTeams();
+
     const room = `game:${game.code}`;
     const totalRounds = game.totalRounds || 5;
     const availableTracks = this.musicService.getAvailableTracks();
@@ -149,16 +180,14 @@ export class GameService {
       totalRounds,
       tracks: game.tracks,
       players: game.players,
+      gameMode: game.gameMode,
+      teams: game.getTeamScores(),
     });
 
     await this.sleep(3000);
 
     // 2. Boucle des rounds
     for (let round = 1; round <= totalRounds; round++) {
-      // if (game.state === GameState.FINISHED) {
-      //   break;
-      // }
-
       game.currentRound = round;
       game.state = GameState.PLAYING;
       const track = game.getCurrentTrack();
@@ -171,6 +200,8 @@ export class GameService {
         track,
         musicUrl: track?.url,
         startTime,
+        gameMode: game.gameMode,
+        teams: game.getTeamScores(),
       });
 
       game.startRound();
@@ -184,6 +215,8 @@ export class GameService {
         currentRound: game.currentRound,
         players: game.players,
         track,
+        gameMode: game.gameMode,
+        teams: game.getTeamScores(),
       });
 
       await this.sleep(7500);
@@ -203,6 +236,8 @@ export class GameService {
     game.state = GameState.FINISHED;
     this.server?.to(room).emit(ServerEvents.GAME_FINISHED, {
       players: game.players,
+      gameMode: game.gameMode,
+      teams: game.getTeamScores(),
     });
   }
 }

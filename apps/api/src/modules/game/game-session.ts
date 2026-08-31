@@ -1,6 +1,7 @@
 import { GameState } from "./game-state";
 import { Player } from "./player";
 import { MusicTrack } from "./music.service";
+import { GameMode, Team, DEFAULT_TEAMS } from "@blindtest/shared";
 
 export class GameSession {
   code: string;
@@ -9,6 +10,8 @@ export class GameSession {
   currentRound: number;
   totalRounds: number;
   masterId: string;
+  gameMode: GameMode;
+  teams: Team[];
   roundStartTime: number = 0;
   correctPlayersForCurrentRound: Set<string> = new Set();
   tracks: MusicTrack[] = [];
@@ -18,7 +21,9 @@ export class GameSession {
   constructor(
     code: string,
     masterId: string,
-    totalRounds: number = 5
+    totalRounds: number = 5,
+    gameMode: GameMode = GameMode.SOLO,
+    teams?: Team[]
   ) {
     this.code = code;
     this.state = GameState.LOBBY;
@@ -26,11 +31,90 @@ export class GameSession {
     this.currentRound = 0;
     this.totalRounds = Math.max(5, Math.min(20, Math.round(totalRounds || 5)));
     this.masterId = masterId;
+    this.gameMode = gameMode;
+    this.teams = teams ? [...teams] : DEFAULT_TEAMS.slice(0, 2).map(t => ({ ...t, score: 0 }));
   }
 
   setTotalRounds(rounds: number): number {
     this.totalRounds = Math.max(5, Math.min(20, Math.round(rounds || 5)));
     return this.totalRounds;
+  }
+
+  setGameMode(mode: GameMode): GameMode {
+    if (Object.values(GameMode).includes(mode)) {
+      this.gameMode = mode;
+    }
+    return this.gameMode;
+  }
+
+  setTeams(teams: Team[]): Team[] {
+    if (Array.isArray(teams) && teams.length >= 2) {
+      this.teams = teams.map((team) => ({
+        id: team.id,
+        name: team.name,
+        color: team.color,
+        score: team.score ?? 0,
+      }));
+      // Nettoyer les teamId des joueurs si l'équipe n'existe plus
+      const validTeamIds = new Set(this.teams.map((t) => t.id));
+      for (const player of this.players) {
+        if (player.teamId && !validTeamIds.has(player.teamId)) {
+          player.teamId = null;
+        }
+      }
+    }
+    return this.teams;
+  }
+
+  assignPlayerToTeam(playerId: string, teamId: string | null): boolean {
+    const player = this.players.find((p) => p.id === playerId);
+    if (!player) return false;
+
+    if (teamId === null) {
+      player.teamId = null;
+      return true;
+    }
+
+    const teamExists = this.teams.some((t) => t.id === teamId);
+    if (teamExists) {
+      player.teamId = teamId;
+      return true;
+    }
+
+    return false;
+  }
+
+  autoAssignTeams() {
+    if (this.gameMode !== GameMode.TEAM || this.teams.length === 0) {
+      return;
+    }
+
+    const unassignedPlayers = this.players.filter((p) => !p.teamId);
+    if (unassignedPlayers.length === 0) {
+      return;
+    }
+
+    for (const player of unassignedPlayers) {
+      // Trouver l'équipe avec le moins de joueurs
+      const teamCounts = this.teams.map((team) => ({
+        teamId: team.id,
+        count: this.players.filter((p) => p.teamId === team.id).length,
+      }));
+
+      teamCounts.sort((a, b) => a.count - b.count);
+      player.teamId = teamCounts[0].teamId;
+    }
+  }
+
+  getTeamScores(): Team[] {
+    return this.teams.map((team) => {
+      const teamPlayers = this.players.filter((p) => p.teamId === team.id);
+      const totalScore = teamPlayers.reduce((sum, p) => sum + (p.score || 0), 0);
+      return {
+        ...team,
+        score: totalScore,
+      };
+    });
   }
 
   startRound() {
@@ -50,6 +134,9 @@ export class GameSession {
     this.roundResolver = undefined;
     for (const player of this.players) {
       player.score = 0;
+    }
+    for (const team of this.teams) {
+      team.score = 0;
     }
   }
 

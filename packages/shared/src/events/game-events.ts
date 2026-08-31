@@ -5,11 +5,14 @@ export const ClientEvents = {
   START_GAME: 'game:start',
   ANSWER: 'game:answer',
   UPDATE_SETTINGS: 'game:update-settings',
+  SELECT_TEAM: 'game:select-team',
 } as const;
 
 export const ServerEvents = {
   GAME_CREATED: 'game:created',
   PLAYER_JOINED: 'game:player-joined',
+  PLAYER_UPDATED: 'game:player-updated',
+  PLAYERS_UPDATED: 'game:players-updated',
   GAME_STARTED: 'game:started',
   ROUND_STARTED: 'round:started',
   ROUND_COUNTDOWN: 'round:countdown',

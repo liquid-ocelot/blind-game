@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { GameMode, Team, DEFAULT_TEAMS, Player as SharedPlayer } from '@blindtest/shared';
 
 export enum GameState {
   LOBBY = 'LOBBY',
@@ -12,6 +13,7 @@ export interface Player {
   id: string;
   name: string;
   score?: number;
+  teamId?: string | null;
   isHost?: boolean;
 }
 
@@ -21,6 +23,8 @@ export interface GameStoreState {
   players: Player[];
   currentRound: number;
   totalRounds: number;
+  gameMode: GameMode;
+  teams: Team[];
   masterId: string | null | undefined;
   playerName: string | null;
 
@@ -31,9 +35,12 @@ export interface GameStoreState {
   addPlayer: (player: Player) => void;
   removePlayer: (playerId: string) => void;
   updatePlayer: (playerId: string, partial: Partial<Player>) => void;
+  setPlayerTeam: (playerId: string, teamId: string | null) => void;
   updateScore: (playerId: string, score: number) => void;
   setCurrentRound: (round: number) => void;
   setTotalRounds: (total: number) => void;
+  setGameMode: (gameMode: GameMode) => void;
+  setTeams: (teams: Team[]) => void;
   setMasterId: (masterId: string | null | undefined) => void;
   setPlayerName: (name: string | null) => void;
   resetGame: () => void;
@@ -45,6 +52,8 @@ const initialState = {
   players: [],
   currentRound: 0,
   totalRounds: 5,
+  gameMode: GameMode.SOLO,
+  teams: DEFAULT_TEAMS.slice(0, 2),
   masterId: null,
   playerName: null,
 };
@@ -69,7 +78,7 @@ export const useGameStore = create<GameStoreState>((set) => ({
         };
       }
       return {
-        players: [...prev.players, { score: 0, ...player }],
+        players: [...prev.players, { score: 0, teamId: null, ...player }],
       };
     }),
 
@@ -85,6 +94,13 @@ export const useGameStore = create<GameStoreState>((set) => ({
       ),
     })),
 
+  setPlayerTeam: (playerId, teamId) =>
+    set((prev) => ({
+      players: prev.players.map((p) =>
+        p.id === playerId ? { ...p, teamId } : p
+      ),
+    })),
+
   updateScore: (playerId, score) =>
     set((prev) => ({
       players: prev.players.map((p) =>
@@ -95,6 +111,10 @@ export const useGameStore = create<GameStoreState>((set) => ({
   setCurrentRound: (currentRound) => set({ currentRound }),
 
   setTotalRounds: (totalRounds) => set({ totalRounds }),
+
+  setGameMode: (gameMode) => set({ gameMode }),
+
+  setTeams: (teams) => set({ teams }),
 
   setMasterId: (masterId) => set({ masterId }),
 

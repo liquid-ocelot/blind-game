@@ -1,4 +1,4 @@
-import { ClientEvents, ServerEvents } from "@blindtest/shared";
+import { ClientEvents, ServerEvents, GameMode, Team, Player } from "@blindtest/shared";
 import {
   ConnectedSocket,
   MessageBody,
@@ -48,15 +48,17 @@ export class GameGateway implements OnGatewayInit {
     data: {
       gameCode: string;
       playerName: string;
+      teamId?: string | null;
     },
     @ConnectedSocket() client: Socket,
   ) {
     client.join(`game:${data.gameCode}`);
 
-    const player = {
+    const player: Player = {
       id: client.id,
       name: data.playerName,
       score: 0,
+      teamId: data.teamId ?? null,
     };
 
     this.gameSessionManager.addPlayer(data.gameCode, player);
@@ -69,6 +71,12 @@ export class GameGateway implements OnGatewayInit {
     if (game) {
       client.emit(ServerEvents.ROOM_SETTINGS_UPDATED, {
         totalRounds: game.totalRounds,
+        gameMode: game.gameMode,
+        teams: game.teams,
+      });
+      // Envoyer la liste de tous les joueurs actuels au joueur qui vient d'arriver
+      client.emit(ServerEvents.PLAYERS_UPDATED, {
+        players: game.players,
       });
     }
   }
@@ -82,12 +90,20 @@ export class GameGateway implements OnGatewayInit {
     client.emit(ServerEvents.GAME_CREATED, {
       code,
       totalRounds: game?.totalRounds ?? 5,
+      gameMode: game?.gameMode ?? GameMode.SOLO,
+      teams: game?.teams ?? [],
     });
   }
 
   @SubscribeMessage(ClientEvents.UPDATE_SETTINGS)
   handleUpdateSettings(
-    @MessageBody() data: { gameCode: string; totalRounds: number },
+    @MessageBody()
+    data: {
+      gameCode: string;
+      totalRounds?: number;
+      gameMode?: GameMode;
+      teams?: Team[];
+    },
     @ConnectedSocket() client: Socket,
   ) {
     const code = data?.gameCode;
@@ -95,7 +111,11 @@ export class GameGateway implements OnGatewayInit {
 
     const game = this.gameService.updateRoomSettings(
       code,
-      { totalRounds: data.totalRounds },
+      {
+        totalRounds: data.totalRounds,
+        gameMode: data.gameMode,
+        teams: data.teams,
+      },
       client.id,
     );
 
@@ -104,7 +124,44 @@ export class GameGateway implements OnGatewayInit {
         .to(`game:${code}`)
         .emit(ServerEvents.ROOM_SETTINGS_UPDATED, {
           totalRounds: game.totalRounds,
+          gameMode: game.gameMode,
+          teams: game.teams,
         });
+
+      this.server
+        .to(`game:${code}`)
+        .emit(ServerEvents.PLAYERS_UPDATED, {
+          players: game.players,
+        });
+    }
+  }
+
+  @SubscribeMessage(ClientEvents.SELECT_TEAM)
+  handleSelectTeam(
+    @MessageBody()
+    data: {
+      gameCode: string;
+      teamId: string | null;
+    },
+    @ConnectedSocket() client: Socket,
+  ) {
+    const code = data?.gameCode;
+    if (!code) return;
+
+    const updatedPlayer = this.gameService.selectTeam(code, client.id, data.teamId);
+    if (updatedPlayer) {
+      const game = this.gameSessionManager.getGame(code);
+      this.server
+        .to(`game:${code}`)
+        .emit(ServerEvents.PLAYER_UPDATED, updatedPlayer);
+
+      if (game) {
+        this.server
+          .to(`game:${code}`)
+          .emit(ServerEvents.PLAYERS_UPDATED, {
+            players: game.players,
+          });
+      }
     }
   }
 

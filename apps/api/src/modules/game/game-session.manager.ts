@@ -28,8 +28,15 @@ export class GameSessionManager {
             const existing = game.players.find((p) => p.id === player.id);
             if (existing) {
                 existing.name = player.name;
+                if (player.teamId !== undefined) {
+                    existing.teamId = player.teamId;
+                }
             } else {
-                game.players.push({ ...player, score: player.score ?? 0 });
+                game.players.push({
+                    ...player,
+                    score: player.score ?? 0,
+                    teamId: player.teamId ?? null,
+                });
             }
         }
     }

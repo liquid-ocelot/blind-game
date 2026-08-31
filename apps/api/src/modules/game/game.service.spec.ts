@@ -2,7 +2,7 @@ import { GameService } from './game.service';
 import { GameSessionManager } from './game-session.manager';
 import { MusicService } from './music.service';
 import { GameState } from './game-state';
-import { ServerEvents } from '@blindtest/shared';
+import { ServerEvents, GameMode, DEFAULT_TEAMS } from '@blindtest/shared';
 import { Socket } from 'socket.io';
 
 describe('GameService', () => {
@@ -30,7 +30,7 @@ describe('GameService', () => {
           url: 'http://test/helene.mp3',
         },
       ];
-      game.players = [{ id: 'client-1', name: 'Alice', isMaster: false, score: 0 }];
+      game.players = [{ id: 'client-1', name: 'Alice', isHost: false, score: 0 }];
 
       const mockClient = {
         id: 'client-1',
@@ -61,7 +61,7 @@ describe('GameService', () => {
           url: 'http://test/deja-vu.mp3',
         },
       ];
-      game.players = [{ id: 'client-1', name: 'Alice', isMaster: false, score: 0 }];
+      game.players = [{ id: 'client-1', name: 'Alice', isHost: false, score: 0 }];
 
       const mockClient = {
         id: 'client-1',
@@ -92,7 +92,7 @@ describe('GameService', () => {
           url: 'http://test/helene.mp3',
         },
       ];
-      game.players = [{ id: 'client-1', name: 'Alice', isMaster: false, score: 0 }];
+      game.players = [{ id: 'client-1', name: 'Alice', isHost: false, score: 0 }];
 
       const mockClient = {
         id: 'client-1',
@@ -145,6 +145,102 @@ describe('GameService', () => {
       const result = service.updateRoomSettings(code, { totalRounds: 10 }, 'master-1');
       expect(result).toBeNull();
       expect(game.totalRounds).toBe(5);
+    });
+  });
+
+  describe('Team Mode configuration and behavior', () => {
+    it('should allow master to enable team mode and configure teams', () => {
+      const code = sessionManager.createGame('master-1');
+      const game = sessionManager.getGame(code)!;
+      expect(game.gameMode).toBe(GameMode.SOLO);
+
+      const customTeams = [
+        { id: 'team-red', name: 'Les Faucons', color: '#EF4444' },
+        { id: 'team-blue', name: 'Les Aigles', color: '#3B82F6' },
+        { id: 'team-green', name: 'Les Loups', color: '#10B981' },
+      ];
+
+      const updated = service.updateRoomSettings(
+        code,
+        {
+          gameMode: GameMode.TEAM,
+          teams: customTeams,
+        },
+        'master-1',
+      );
+
+      expect(updated).not.toBeNull();
+      expect(game.gameMode).toBe(GameMode.TEAM);
+      expect(game.teams.length).toBe(3);
+      expect(game.teams[0].name).toBe('Les Faucons');
+    });
+
+    it('should allow players to select team in lobby', () => {
+      const code = sessionManager.createGame('master-1');
+      sessionManager.addPlayer(code, { id: 'p1', name: 'Alex', score: 0 });
+      sessionManager.addPlayer(code, { id: 'p2', name: 'Bob', score: 0 });
+
+      service.updateRoomSettings(code, { gameMode: GameMode.TEAM }, 'master-1');
+
+      const updatedP1 = service.selectTeam(code, 'p1', 'team-red');
+      expect(updatedP1).not.toBeNull();
+      expect(updatedP1?.teamId).toBe('team-red');
+
+      const updatedP2 = service.selectTeam(code, 'p2', 'team-blue');
+      expect(updatedP2).not.toBeNull();
+      expect(updatedP2?.teamId).toBe('team-blue');
+    });
+
+    it('should auto-assign unassigned players when game starts in team mode', () => {
+      const code = sessionManager.createGame('master-1');
+      const game = sessionManager.getGame(code)!;
+      game.gameMode = GameMode.TEAM;
+      game.teams = DEFAULT_TEAMS.slice(0, 2);
+
+      sessionManager.addPlayer(code, { id: 'p1', name: 'Alice', score: 0 });
+      sessionManager.addPlayer(code, { id: 'p2', name: 'Bob', score: 0 });
+      sessionManager.addPlayer(code, { id: 'p3', name: 'Charlie', score: 0, teamId: 'team-red' });
+
+      game.autoAssignTeams();
+
+      const p1 = game.players.find((p) => p.id === 'p1');
+      const p2 = game.players.find((p) => p.id === 'p2');
+      const p3 = game.players.find((p) => p.id === 'p3');
+
+      expect(p3?.teamId).toBe('team-red');
+      // P1 & P2 should be balanced
+      expect(p1?.teamId).toBeDefined();
+      expect(p2?.teamId).toBeDefined();
+      expect(['team-red', 'team-blue']).toContain(p1?.teamId);
+      expect(['team-red', 'team-blue']).toContain(p2?.teamId);
+    });
+
+    it('should aggregate team scores correctly when players score points', () => {
+      const code = sessionManager.createGame('master-1');
+      const game = sessionManager.getGame(code)!;
+      game.state = GameState.PLAYING;
+      game.currentRound = 1;
+      game.gameMode = GameMode.TEAM;
+      game.tracks = [
+        {
+          id: '1',
+          name: 'track.mp3',
+          title: 'Star Wars',
+          url: 'http://test/track.mp3',
+        },
+      ];
+      game.players = [
+        { id: 'p1', name: 'Alice', teamId: 'team-red', score: 50 },
+        { id: 'p2', name: 'Bob', teamId: 'team-red', score: 30 },
+        { id: 'p3', name: 'Charlie', teamId: 'team-blue', score: 40 },
+      ];
+
+      const teamScores = game.getTeamScores();
+      const redTeam = teamScores.find((t) => t.id === 'team-red');
+      const blueTeam = teamScores.find((t) => t.id === 'team-blue');
+
+      expect(redTeam?.score).toBe(80);
+      expect(blueTeam?.score).toBe(40);
     });
   });
 });

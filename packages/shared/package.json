@@ -15,6 +15,11 @@
       "types": "./dist/events/index.d.ts",
       "import": "./dist/events/index.js",
       "require": "./dist/events/index.js"
+    },
+    "./types": {
+      "types": "./dist/types/index.d.ts",
+      "import": "./dist/types/index.js",
+      "require": "./dist/types/index.js"
     }
   },
   "scripts": {
