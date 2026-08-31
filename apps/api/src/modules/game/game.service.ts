@@ -6,6 +6,17 @@ import { GameState } from './game-state';
 import { ServerEvents, GameMode, Team, Player } from '@blindtest/shared';
 import { MusicService, MusicTrack } from './music.service';
 
+export function calculateAudioStartTime(duration?: number): number {
+  const minStartTime = 13;
+  const musicDuration =
+    typeof duration === 'number' && duration > 0 ? duration : 180;
+  const maxStartTime = Math.max(minStartTime, Math.floor(musicDuration - 40));
+
+  return (
+    Math.floor(Math.random() * (maxStartTime - minStartTime + 1)) + minStartTime
+  );
+}
+
 @Injectable()
 export class GameService {
   server: Server;
@@ -202,7 +213,7 @@ export class GameService {
       game.state = GameState.PLAYING;
       game.startRound();
       const track = game.getCurrentTrack();
-      const startTime = Math.floor(Math.random() * 41) + 10;
+      const startTime = calculateAudioStartTime(track?.duration);
 
       this.server?.to(room).emit(ServerEvents.ROUND_STARTED, {
         currentRound: game.currentRound,

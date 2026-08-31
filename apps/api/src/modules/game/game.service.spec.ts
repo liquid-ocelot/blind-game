@@ -1,9 +1,12 @@
-import { GameService } from './game.service';
+import { GameService, calculateAudioStartTime } from './game.service';
 import { GameSessionManager } from './game-session.manager';
 import { MusicService } from './music.service';
 import { GameState } from './game-state';
 import { ServerEvents, GameMode, DEFAULT_TEAMS } from '@blindtest/shared';
 import { Socket } from 'socket.io';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
+import * as os from 'node:os';
 
 describe('GameService', () => {
   let service: GameService;
@@ -303,6 +306,81 @@ describe('GameService', () => {
 
       // 4. Toutes les équipes actives ont répondu -> haveAllPlayersAnswered est vrai
       expect(game.haveAllPlayersAnswered()).toBe(true);
+    });
+  });
+
+  describe('calculateAudioStartTime', () => {
+    it('should return a start time between 13 and (duration - 40)', () => {
+      const duration = 200; // maxStartTime = 160
+      for (let i = 0; i < 100; i++) {
+        const startTime = calculateAudioStartTime(duration);
+        expect(startTime).toBeGreaterThanOrEqual(13);
+        expect(startTime).toBeLessThanOrEqual(160);
+      }
+    });
+
+    it('should return 13 when music duration is short (<= 53 seconds)', () => {
+      const duration = 50;
+      const startTime = calculateAudioStartTime(duration);
+      expect(startTime).toBe(13);
+    });
+
+    it('should use default duration of 180s when undefined (interval [13, 140])', () => {
+      for (let i = 0; i < 50; i++) {
+        const startTime = calculateAudioStartTime(undefined);
+        expect(startTime).toBeGreaterThanOrEqual(13);
+        expect(startTime).toBeLessThanOrEqual(140);
+      }
+    });
+  });
+
+  describe('MusicService metadata directory and files', () => {
+    let tmpDir: string;
+
+    beforeEach(() => {
+      tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'music-test-'));
+    });
+
+    afterEach(() => {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    });
+
+    it('should create metadata directory and txt files for every music file', () => {
+      // Créer de faux fichiers musicaux
+      fs.writeFileSync(path.join(tmpDir, 'chanson1.mp3'), 'fake-audio');
+      fs.writeFileSync(path.join(tmpDir, 'chanson2.wav'), 'fake-audio');
+
+      const customMusicService = new MusicService();
+      (customMusicService as any).musicDir = tmpDir;
+
+      customMusicService.ensureMetadataFiles();
+
+      const metadataDir = path.join(tmpDir, 'metadata');
+      expect(fs.existsSync(metadataDir)).toBe(true);
+      expect(fs.existsSync(path.join(metadataDir, 'chanson1.txt'))).toBe(true);
+      expect(fs.existsSync(path.join(metadataDir, 'chanson2.txt'))).toBe(true);
+    });
+
+    it('should not overwrite existing txt metadata files', () => {
+      fs.writeFileSync(path.join(tmpDir, 'chanson.mp3'), 'fake-audio');
+      const metadataDir = path.join(tmpDir, 'metadata');
+      fs.mkdirSync(metadataDir, { recursive: true });
+      fs.writeFileSync(
+        path.join(metadataDir, 'chanson.txt'),
+        'custom-metadata-content',
+        'utf-8',
+      );
+
+      const customMusicService = new MusicService();
+      (customMusicService as any).musicDir = tmpDir;
+
+      customMusicService.ensureMetadataFiles();
+
+      const content = fs.readFileSync(
+        path.join(metadataDir, 'chanson.txt'),
+        'utf-8',
+      );
+      expect(content).toBe('custom-metadata-content');
     });
   });
 });
