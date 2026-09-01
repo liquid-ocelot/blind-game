@@ -141,7 +141,14 @@ export class GameService {
       1,
       Math.floor(Date.now() / 1000) - game.roundStartTime,
     );
-    const calculatedScore = Math.ceil(100 - 50 * (elapsedTime / roundTime));
+
+    let calculatedScore: number;
+
+    if (elapsedTime <= 5) {
+      calculatedScore = 100;
+    } else {
+      calculatedScore = Math.ceil(100 - 50 * (elapsedTime / (roundTime - 5)));
+    }
 
     console.log(`player : ${player?.name} earned: ${calculatedScore}`);
 
