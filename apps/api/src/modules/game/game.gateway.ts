@@ -73,6 +73,7 @@ export class GameGateway implements OnGatewayInit {
         totalRounds: game.totalRounds,
         gameMode: game.gameMode,
         teams: game.teams,
+        artistBonusEnabled: game.artistBonusEnabled,
       });
       // Envoyer la liste de tous les joueurs actuels au joueur qui vient d'arriver
       client.emit(ServerEvents.PLAYERS_UPDATED, {
@@ -92,6 +93,7 @@ export class GameGateway implements OnGatewayInit {
       totalRounds: game?.totalRounds ?? 5,
       gameMode: game?.gameMode ?? GameMode.SOLO,
       teams: game?.teams ?? [],
+      artistBonusEnabled: game?.artistBonusEnabled ?? false,
     });
   }
 
@@ -103,6 +105,7 @@ export class GameGateway implements OnGatewayInit {
       totalRounds?: number;
       gameMode?: GameMode;
       teams?: Team[];
+      artistBonusEnabled?: boolean;
     },
     @ConnectedSocket() client: Socket,
   ) {
@@ -115,6 +118,7 @@ export class GameGateway implements OnGatewayInit {
         totalRounds: data.totalRounds,
         gameMode: data.gameMode,
         teams: data.teams,
+        artistBonusEnabled: data.artistBonusEnabled,
       },
       client.id,
     );
@@ -126,6 +130,7 @@ export class GameGateway implements OnGatewayInit {
           totalRounds: game.totalRounds,
           gameMode: game.gameMode,
           teams: game.teams,
+          artistBonusEnabled: game.artistBonusEnabled,
         });
 
       this.server

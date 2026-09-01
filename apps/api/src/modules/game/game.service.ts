@@ -55,7 +55,12 @@ export class GameService {
 
   updateRoomSettings(
     code: string,
-    settings: { totalRounds?: number; gameMode?: GameMode; teams?: Team[] },
+    settings: {
+      totalRounds?: number;
+      gameMode?: GameMode;
+      teams?: Team[];
+      artistBonusEnabled?: boolean;
+    },
     clientId: string,
   ) {
     const game = this.gameSessionManager.getGame(code);
@@ -77,6 +82,9 @@ export class GameService {
     }
     if (settings.teams) {
       game.setTeams(settings.teams);
+    }
+    if (typeof settings.artistBonusEnabled === 'boolean') {
+      game.setArtistBonusEnabled(settings.artistBonusEnabled);
     }
 
     return game;
@@ -109,19 +117,49 @@ export class GameService {
       return;
     }
 
-    if (!game.canPlayerAnswer(client.id)) {
+    const currentTrack = game.getCurrentTrack();
+    if (!currentTrack) {
       return;
     }
 
-    const currentTrack = game.getCurrentTrack();
     const cleanAnswer = this.normalizeString(answer);
-    const cleanTitle = currentTrack ? this.normalizeString(currentTrack.title) : '';
-    const isTrackMatch = currentTrack && cleanAnswer.length > 0 && (
-      cleanAnswer.includes(cleanTitle)
-    );
+    if (!cleanAnswer) {
+      return;
+    }
 
-    if (isTrackMatch) {
-      this.handleGoodAnswer(client, game);
+    const cleanTitle = this.normalizeString(currentTrack.title);
+    const cleanAuthor = currentTrack.author
+      ? this.normalizeString(currentTrack.author)
+      : currentTrack.artist
+      ? this.normalizeString(currentTrack.artist)
+      : '';
+
+    // 1. Réponse principale (Titre, ou Auteur si le bonus n'est pas activé)
+    if (game.canPlayerAnswer(client.id)) {
+      const isTitleMatch =
+        cleanTitle.length > 0 && cleanAnswer.includes(cleanTitle);
+      const isAuthorMatch =
+        cleanAuthor.length > 0 && cleanAnswer.includes(cleanAuthor);
+
+      const isMainMatch = game.artistBonusEnabled
+        ? isTitleMatch
+        : isTitleMatch || isAuthorMatch;
+
+      if (isMainMatch) {
+        this.handleGoodAnswer(client, game);
+        return;
+      }
+    }
+
+    // 2. Réponse bonus artiste (si activé et joueur/équipe éligible)
+    if (game.canPlayerAnswerBonus(client.id)) {
+      const isBonusMatch =
+        cleanAuthor.length > 0 && cleanAnswer.includes(cleanAuthor);
+
+      if (isBonusMatch) {
+        this.handleGoodBonusAnswer(client, game);
+        return;
+      }
     }
   }
 
@@ -162,6 +200,8 @@ export class GameService {
     const teamScores = game.getTeamScores();
     const correctPlayers = Array.from(game.correctPlayersForCurrentRound);
     const correctTeams = Array.from(game.correctTeamsForCurrentRound);
+    const bonusPlayers = Array.from(game.bonusPlayersForCurrentRound);
+    const bonusTeams = Array.from(game.bonusTeamsForCurrentRound);
 
     client.emit(ServerEvents.VALID_ANSWER, {
       newScore,
@@ -169,6 +209,9 @@ export class GameService {
       teamId: player?.teamId,
       correctPlayers,
       correctTeams,
+      bonusPlayers,
+      bonusTeams,
+      artistBonusEnabled: game.artistBonusEnabled,
     });
 
     const room = `game:${game.code}`;
@@ -179,6 +222,56 @@ export class GameService {
       teamScores,
       correctPlayers,
       correctTeams,
+      bonusPlayers,
+      bonusTeams,
+    });
+
+    if (game.haveAllPlayersAnswered()) {
+      game.endRoundEarly();
+    }
+  }
+
+  private handleGoodBonusAnswer(client: Socket, game: GameSession) {
+    const player = game.players.find((p) => p.id === client.id);
+    const bonusPoints = 50;
+
+    console.log(`player : ${player?.name} earned artist bonus: ${bonusPoints}`);
+
+    const newScore = (player?.score ?? 0) + bonusPoints;
+    if (player != null) {
+      player.score = newScore;
+    }
+
+    game.recordCorrectBonusAnswer(client.id);
+
+    const teamScores = game.getTeamScores();
+    const correctPlayers = Array.from(game.correctPlayersForCurrentRound);
+    const correctTeams = Array.from(game.correctTeamsForCurrentRound);
+    const bonusPlayers = Array.from(game.bonusPlayersForCurrentRound);
+    const bonusTeams = Array.from(game.bonusTeamsForCurrentRound);
+
+    client.emit(ServerEvents.BONUS_VALID_ANSWER, {
+      newScore,
+      bonusPoints,
+      teamScores,
+      teamId: player?.teamId,
+      correctPlayers,
+      correctTeams,
+      bonusPlayers,
+      bonusTeams,
+      artistBonusEnabled: game.artistBonusEnabled,
+    });
+
+    const room = `game:${game.code}`;
+    this.server?.to(room).emit(ServerEvents.SCORE_UPDATED, {
+      playerId: player?.id,
+      newScore,
+      players: game.players,
+      teamScores,
+      correctPlayers,
+      correctTeams,
+      bonusPlayers,
+      bonusTeams,
     });
 
     if (game.haveAllPlayersAnswered()) {
@@ -225,6 +318,7 @@ export class GameService {
       players: game.players,
       gameMode: game.gameMode,
       teams: game.getTeamScores(),
+      artistBonusEnabled: game.artistBonusEnabled,
     });
 
     await this.sleep(3000);
@@ -249,8 +343,11 @@ export class GameService {
         startTime,
         gameMode: game.gameMode,
         teams: game.getTeamScores(),
+        artistBonusEnabled: game.artistBonusEnabled,
         correctPlayers: [],
         correctTeams: [],
+        bonusPlayers: [],
+        bonusTeams: [],
       });
 
       // Durée du round pour deviner (fin anticipée si tous les joueurs ont trouvé)
@@ -264,6 +361,11 @@ export class GameService {
         track,
         gameMode: game.gameMode,
         teams: game.getTeamScores(),
+        artistBonusEnabled: game.artistBonusEnabled,
+        correctPlayers: Array.from(game.correctPlayersForCurrentRound),
+        correctTeams: Array.from(game.correctTeamsForCurrentRound),
+        bonusPlayers: Array.from(game.bonusPlayersForCurrentRound),
+        bonusTeams: Array.from(game.bonusTeamsForCurrentRound),
       });
 
       await this.sleep(7500);

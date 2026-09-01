@@ -423,7 +423,180 @@ describe('GameService', () => {
         path.join(metadataDir, 'chanson.txt'),
         'utf-8',
       );
-      expect(content).toBe('custom-metadata-content');
+      expect(content).toBe('Artiste Personnalisé\n25, 50\n');
+    });
+  });
+
+  describe('Artist Bonus Option', () => {
+    it('should configure artistBonusEnabled via updateRoomSettings', () => {
+      const code = service.createGame('master-1');
+      let game = service.getGame(code)!;
+      expect(game.artistBonusEnabled).toBe(false);
+
+      game = service.updateRoomSettings(
+        code,
+        { artistBonusEnabled: true },
+        'master-1',
+      )!;
+      expect(game.artistBonusEnabled).toBe(true);
+
+      game = service.updateRoomSettings(
+        code,
+        { artistBonusEnabled: false },
+        'master-1',
+      )!;
+      expect(game.artistBonusEnabled).toBe(false);
+    });
+
+    it('should allow player to guess title then guess artist for bonus points in solo mode', () => {
+      const code = service.createGame('master-1');
+      const game = service.getGame(code)!;
+      game.artistBonusEnabled = true;
+
+      const client = { id: 'player-1', emit: jest.fn() } as unknown as Socket;
+      game.players = [{ id: 'player-1', name: 'Alice', teamId: null, score: 0 }];
+      game.state = GameState.PLAYING;
+      game.currentRound = 1;
+      game.roundStartTime = Math.floor(Date.now() / 1000);
+      game.tracks = [
+        {
+          id: '1',
+          filename: 'queen.mp3',
+          title: 'Bohemian Rhapsody',
+          author: 'Queen',
+          url: '/music/queen.mp3',
+        },
+      ];
+
+      // 1. Tenter l'artiste en premier alors que le bonus artiste est activé -> ignoré pour la réponse principale
+      service.verifyAnswer(code, 'Queen', client);
+      expect(client.emit).not.toHaveBeenCalledWith(ServerEvents.VALID_ANSWER, expect.anything());
+      expect(game.hasPlayerAnsweredCorrectly('player-1')).toBe(false);
+
+      // 2. Répondre avec le titre du morceau -> validé pour la réponse principale
+      service.verifyAnswer(code, 'Bohemian Rhapsody', client);
+      expect(client.emit).toHaveBeenCalledWith(
+        ServerEvents.VALID_ANSWER,
+        expect.objectContaining({
+          newScore: expect.any(Number),
+          artistBonusEnabled: true,
+        }),
+      );
+      expect(game.hasPlayerAnsweredCorrectly('player-1')).toBe(true);
+      expect(game.hasPlayerAnsweredBonus('player-1')).toBe(false);
+
+      const scoreAfterTitle = game.players[0].score!;
+      expect(scoreAfterTitle).toBeGreaterThan(0);
+
+      // 3. Répondre avec l'artiste pour le bonus -> validé pour +50 points bonus
+      service.verifyAnswer(code, 'Queen', client);
+      expect(client.emit).toHaveBeenCalledWith(
+        ServerEvents.BONUS_VALID_ANSWER,
+        expect.objectContaining({
+          newScore: scoreAfterTitle + 50,
+          bonusPoints: 50,
+        }),
+      );
+      expect(game.hasPlayerAnsweredBonus('player-1')).toBe(true);
+      expect(game.players[0].score).toBe(scoreAfterTitle + 50);
+
+      // 4. Une seconde réponse pour le bonus ne donne pas de points supplémentaires
+      const emitCount = (client.emit as jest.Mock).mock.calls.length;
+      service.verifyAnswer(code, 'Queen', client);
+      expect((client.emit as jest.Mock).mock.calls.length).toBe(emitCount);
+      expect(game.players[0].score).toBe(scoreAfterTitle + 50);
+    });
+
+    it('should allow 1 artist bonus per team in team mode', () => {
+      const code = service.createGame('master-1');
+      const game = service.getGame(code)!;
+      game.gameMode = GameMode.TEAM;
+      game.artistBonusEnabled = true;
+
+      const clientAlice = { id: 'p-1', emit: jest.fn() } as unknown as Socket;
+      const clientBob = { id: 'p-2', emit: jest.fn() } as unknown as Socket;
+
+      game.players = [
+        { id: 'p-1', name: 'Alice', teamId: 'team-red', score: 0 },
+        { id: 'p-2', name: 'Bob', teamId: 'team-red', score: 0 },
+      ];
+      game.teams = [{ id: 'team-red', name: 'Équipe Rouge', color: '#EF4444', score: 0 }];
+      game.state = GameState.PLAYING;
+      game.currentRound = 1;
+      game.roundStartTime = Math.floor(Date.now() / 1000);
+      game.tracks = [
+        {
+          id: '1',
+          filename: 'daft.mp3',
+          title: 'Get Lucky',
+          author: 'Daft Punk',
+          url: '/music/daft.mp3',
+        },
+      ];
+
+      // Alice trouve le titre pour l'équipe rouge
+      service.verifyAnswer(code, 'Get Lucky', clientAlice);
+      expect(game.hasTeamAnsweredCorrectly('team-red')).toBe(true);
+      expect(game.hasPlayerAnsweredCorrectly('p-1')).toBe(true);
+      const teamScoreAfterTitle = game.getTeamScores()[0].score;
+
+      // Bob trouve l'artiste pour le bonus d'équipe (+50 pts)
+      service.verifyAnswer(code, 'Daft Punk', clientBob);
+      expect(clientBob.emit).toHaveBeenCalledWith(
+        ServerEvents.BONUS_VALID_ANSWER,
+        expect.objectContaining({
+          newScore: 50,
+          bonusPoints: 50,
+        }),
+      );
+      expect(game.hasTeamAnsweredBonus('team-red')).toBe(true);
+      expect(game.getTeamScores()[0].score).toBe(teamScoreAfterTitle! + 50);
+
+      // Alice tente de re-soumettre le bonus -> refusé car l'équipe a déjà le bonus
+      const emitCountAlice = (clientAlice.emit as jest.Mock).mock.calls.length;
+      service.verifyAnswer(code, 'Daft Punk', clientAlice);
+      expect((clientAlice.emit as jest.Mock).mock.calls.length).toBe(emitCountAlice);
+    });
+
+    it('should check haveAllPlayersAnswered correctly with artistBonusEnabled', () => {
+      const code = service.createGame('master-1');
+      const game = service.getGame(code)!;
+      game.artistBonusEnabled = true;
+
+      const client1 = { id: 'p-1', emit: jest.fn() } as unknown as Socket;
+      const client2 = { id: 'p-2', emit: jest.fn() } as unknown as Socket;
+
+      game.players = [
+        { id: 'p-1', name: 'Alice', teamId: null, score: 0 },
+        { id: 'p-2', name: 'Bob', teamId: null, score: 0 },
+      ];
+      game.state = GameState.PLAYING;
+      game.currentRound = 1;
+      game.roundStartTime = Math.floor(Date.now() / 1000);
+      game.tracks = [
+        {
+          id: '1',
+          filename: 'queen.mp3',
+          title: 'Radio Ga Ga',
+          author: 'Queen',
+          url: '/music/queen.mp3',
+        },
+      ];
+
+      // Alice & Bob répondent au titre
+      service.verifyAnswer(code, 'Radio Ga Ga', client1);
+      service.verifyAnswer(code, 'Radio Ga Ga', client2);
+
+      // Tous ont répondu au titre mais pas au bonus -> haveAllPlayersAnswered est false
+      expect(game.haveAllPlayersAnswered()).toBe(false);
+
+      // Alice répond au bonus
+      service.verifyAnswer(code, 'Queen', client1);
+      expect(game.haveAllPlayersAnswered()).toBe(false);
+
+      // Bob répond au bonus -> tout le monde a répondu titre + bonus -> true
+      service.verifyAnswer(code, 'Queen', client2);
+      expect(game.haveAllPlayersAnswered()).toBe(true);
     });
   });
 });

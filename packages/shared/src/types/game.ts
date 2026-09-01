@@ -22,6 +22,7 @@ export interface RoomSettings {
   totalRounds: number;
   gameMode: GameMode;
   teams?: Team[];
+  artistBonusEnabled?: boolean;
 }
 
 export const DEFAULT_TEAMS: Team[] = [

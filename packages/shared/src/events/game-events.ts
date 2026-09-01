@@ -19,6 +19,7 @@ export const ServerEvents = {
   ROUND_ENDED: 'round:ended',
   SCORE_UPDATED: 'game:score-updated',
   VALID_ANSWER: 'game:valid-answer',
+  BONUS_VALID_ANSWER: 'game:bonus-valid-answer',
   INVALID_ANSWER: 'game:invalid-answer',
   GAME_FINISHED: 'game:finished',
   ROOM_SETTINGS_UPDATED: 'room:settings-updated',

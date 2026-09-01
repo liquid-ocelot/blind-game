@@ -32,10 +32,16 @@ export default function PlayPage() {
     setGameMode,
     teams,
     setTeams,
+    artistBonusEnabled,
+    setArtistBonusEnabled,
     correctPlayers,
     correctTeams,
+    bonusPlayers,
+    bonusTeams,
     setCorrectPlayers,
     setCorrectTeams,
+    setBonusPlayers,
+    setBonusTeams,
     clearCorrectAnswers,
     code,
     setCode,
@@ -46,8 +52,11 @@ export default function PlayPage() {
   const [hasJoined, setHasJoined] = useState(Boolean(playerName));
   const [answer, setAnswer] = useState('');
   const [submittedAnswer, setSubmittedAnswer] = useState<string | null>(null);
+  const [artistAnswer, setArtistAnswer] = useState('');
+  const [submittedBonusAnswer, setSubmittedBonusAnswer] = useState<string | null>(null);
   const [timeLeft, setTimeLeft] = useState<number | null>(null);
   const [hasAnsweredCorrectly, setHasAnsweredCorrectly] = useState(false);
+  const [hasBonusAnswered, setHasBonusAnswered] = useState(false);
 
   // Gérer la connexion directe si le pseudo n'est pas encore défini
   function handleJoinDirectly() {
@@ -90,6 +99,20 @@ export default function PlayPage() {
     setAnswer('');
   }
 
+  // Soumission de réponse bonus artiste
+  function handleSendBonusAnswer(e?: React.FormEvent) {
+    if (e) e.preventDefault();
+    if (!socket || !isConnected || !artistAnswer.trim()) return;
+
+    socket.emit(ClientEvents.ANSWER, {
+      gameCode: code || codeGame,
+      answer: artistAnswer.trim(),
+    });
+
+    setSubmittedBonusAnswer(artistAnswer.trim());
+    setArtistAnswer('');
+  }
+
   // Timer pendant la manche
   useEffect(() => {
     if (state !== GameState.PLAYING || timeLeft === null || timeLeft <= 0) return;
@@ -125,12 +148,16 @@ export default function PlayPage() {
       players?: Player[];
       gameMode?: GameMode;
       teams?: Team[];
+      artistBonusEnabled?: boolean;
     }) {
       setState(GameState.COUNTDOWN);
       setHasAnsweredCorrectly(false);
+      setHasBonusAnswered(false);
       clearCorrectAnswers();
       setSubmittedAnswer(null);
+      setSubmittedBonusAnswer(null);
       setAnswer('');
+      setArtistAnswer('');
       if (data?.code) {
         setCode(data.code);
       }
@@ -142,6 +169,9 @@ export default function PlayPage() {
       }
       if (data?.teams) {
         setTeams(data.teams);
+      }
+      if (typeof data?.artistBonusEnabled === 'boolean') {
+        setArtistBonusEnabled(data.artistBonusEnabled);
       }
       if (data?.players) {
         setPlayers(data.players);
@@ -156,20 +186,31 @@ export default function PlayPage() {
       duration: number;
       gameMode?: GameMode;
       teams?: Team[];
+      artistBonusEnabled?: boolean;
       correctPlayers?: string[];
       correctTeams?: string[];
+      bonusPlayers?: string[];
+      bonusTeams?: string[];
     }) {
       setState(GameState.PLAYING);
       setCurrentRound(data.currentRound);
       setTotalRounds(data.totalRounds);
       if (data?.gameMode) setGameMode(data.gameMode);
       if (data?.teams) setTeams(data.teams);
+      if (typeof data?.artistBonusEnabled === 'boolean') {
+        setArtistBonusEnabled(data.artistBonusEnabled);
+      }
       setTimeLeft(data.duration || 30);
       setSubmittedAnswer(null);
+      setSubmittedBonusAnswer(null);
       setAnswer('');
+      setArtistAnswer('');
       setHasAnsweredCorrectly(false);
+      setHasBonusAnswered(false);
       setCorrectPlayers(data?.correctPlayers || []);
       setCorrectTeams(data?.correctTeams || []);
+      setBonusPlayers(data?.bonusPlayers || []);
+      setBonusTeams(data?.bonusTeams || []);
     }
 
     function onRoundEnded(data: {
@@ -177,9 +218,11 @@ export default function PlayPage() {
       players: Player[];
       gameMode?: GameMode;
       teams?: Team[];
+      artistBonusEnabled?: boolean;
     }) {
       setState(GameState.RESULTS);
       setHasAnsweredCorrectly(false);
+      setHasBonusAnswered(false);
       clearCorrectAnswers();
       if (data?.players) {
         setPlayers(data.players);
@@ -190,14 +233,20 @@ export default function PlayPage() {
       if (data?.teams) {
         setTeams(data.teams);
       }
+      if (typeof data?.artistBonusEnabled === 'boolean') {
+        setArtistBonusEnabled(data.artistBonusEnabled);
+      }
     }
 
     function onRoundCountdown() {
       setState(GameState.COUNTDOWN);
       setHasAnsweredCorrectly(false);
+      setHasBonusAnswered(false);
       clearCorrectAnswers();
       setSubmittedAnswer(null);
+      setSubmittedBonusAnswer(null);
       setAnswer('');
+      setArtistAnswer('');
     }
 
     function onScoreUpdated(data: {
@@ -207,6 +256,8 @@ export default function PlayPage() {
       teamScores?: Team[];
       correctPlayers?: string[];
       correctTeams?: string[];
+      bonusPlayers?: string[];
+      bonusTeams?: string[];
     }) {
       if (data?.players) {
         setPlayers(data.players);
@@ -220,6 +271,12 @@ export default function PlayPage() {
       if (data?.correctTeams) {
         setCorrectTeams(data.correctTeams);
       }
+      if (data?.bonusPlayers) {
+        setBonusPlayers(data.bonusPlayers);
+      }
+      if (data?.bonusTeams) {
+        setBonusTeams(data.bonusTeams);
+      }
     }
 
     function onGameFinished(data: {
@@ -229,6 +286,7 @@ export default function PlayPage() {
     }) {
       setState(GameState.FINISHED);
       setHasAnsweredCorrectly(false);
+      setHasBonusAnswered(false);
       clearCorrectAnswers();
       if (data?.players) {
         setPlayers(data.players);
@@ -246,6 +304,9 @@ export default function PlayPage() {
       teamScores?: Team[];
       correctPlayers?: string[];
       correctTeams?: string[];
+      bonusPlayers?: string[];
+      bonusTeams?: string[];
+      artistBonusEnabled?: boolean;
     }) {
       console.log(data.newScore);
       setHasAnsweredCorrectly(true);
@@ -261,12 +322,57 @@ export default function PlayPage() {
       if (data?.correctTeams) {
         setCorrectTeams(data.correctTeams);
       }
+      if (data?.bonusPlayers) {
+        setBonusPlayers(data.bonusPlayers);
+      }
+      if (data?.bonusTeams) {
+        setBonusTeams(data.bonusTeams);
+      }
+      if (typeof data?.artistBonusEnabled === 'boolean') {
+        setArtistBonusEnabled(data.artistBonusEnabled);
+      }
+    }
+
+    function onBonusGoodAnswer(data: {
+      newScore: number;
+      bonusPoints?: number;
+      teamScores?: Team[];
+      correctPlayers?: string[];
+      correctTeams?: string[];
+      bonusPlayers?: string[];
+      bonusTeams?: string[];
+      artistBonusEnabled?: boolean;
+    }) {
+      console.log('Bonus answer valid:', data);
+      setHasBonusAnswered(true);
+      if (socket?.id) {
+        updateScore(socket.id, data.newScore);
+      }
+      if (data?.teamScores) {
+        setTeams(data.teamScores);
+      }
+      if (data?.correctPlayers) {
+        setCorrectPlayers(data.correctPlayers);
+      }
+      if (data?.correctTeams) {
+        setCorrectTeams(data.correctTeams);
+      }
+      if (data?.bonusPlayers) {
+        setBonusPlayers(data.bonusPlayers);
+      }
+      if (data?.bonusTeams) {
+        setBonusTeams(data.bonusTeams);
+      }
+      if (typeof data?.artistBonusEnabled === 'boolean') {
+        setArtistBonusEnabled(data.artistBonusEnabled);
+      }
     }
 
     function onRoomSettingsUpdated(data: {
       totalRounds?: number;
       gameMode?: GameMode;
       teams?: Team[];
+      artistBonusEnabled?: boolean;
     }) {
       if (data?.totalRounds) {
         setTotalRounds(data.totalRounds);
@@ -276,6 +382,9 @@ export default function PlayPage() {
       }
       if (data?.teams) {
         setTeams(data.teams);
+      }
+      if (typeof data?.artistBonusEnabled === 'boolean') {
+        setArtistBonusEnabled(data.artistBonusEnabled);
       }
     }
 
@@ -288,6 +397,7 @@ export default function PlayPage() {
     socket.on(ServerEvents.ROUND_ENDED, onRoundEnded);
     socket.on(ServerEvents.SCORE_UPDATED, onScoreUpdated);
     socket.on(ServerEvents.VALID_ANSWER, onGoodAnswer);
+    socket.on(ServerEvents.BONUS_VALID_ANSWER, onBonusGoodAnswer);
     socket.on(ServerEvents.GAME_FINISHED, onGameFinished);
     socket.on(ServerEvents.ROOM_SETTINGS_UPDATED, onRoomSettingsUpdated);
 
@@ -301,6 +411,7 @@ export default function PlayPage() {
       socket.off(ServerEvents.ROUND_ENDED, onRoundEnded);
       socket.off(ServerEvents.SCORE_UPDATED, onScoreUpdated);
       socket.off(ServerEvents.VALID_ANSWER, onGoodAnswer);
+      socket.off(ServerEvents.BONUS_VALID_ANSWER, onBonusGoodAnswer);
       socket.off(ServerEvents.GAME_FINISHED, onGameFinished);
       socket.off(ServerEvents.ROOM_SETTINGS_UPDATED, onRoomSettingsUpdated);
     };
@@ -312,6 +423,7 @@ export default function PlayPage() {
     setTotalRounds,
     setGameMode,
     setTeams,
+    setArtistBonusEnabled,
     setPlayers,
     addPlayer,
     updatePlayer,
@@ -319,6 +431,8 @@ export default function PlayPage() {
     setCode,
     setCorrectPlayers,
     setCorrectTeams,
+    setBonusPlayers,
+    setBonusTeams,
     clearCorrectAnswers,
   ]);
 
@@ -335,6 +449,23 @@ export default function PlayPage() {
     correctTeams.includes(currentPlayer?.teamId as string);
 
   const isTeammateAnswered = isMyTeamAnswered && !hasAnsweredCorrectly;
+
+  const isMainFound = hasAnsweredCorrectly || isMyTeamAnswered;
+
+  const hasPlayerBonusAnswered =
+    hasBonusAnswered ||
+    (Boolean(socket?.id) && bonusPlayers.includes(socket!.id)) ||
+    (Boolean(currentPlayer?.id) && bonusPlayers.includes(currentPlayer!.id));
+
+  const isMyTeamBonusAnswered =
+    gameMode === GameMode.TEAM &&
+    Boolean(currentPlayer?.teamId) &&
+    bonusTeams.includes(currentPlayer?.teamId as string);
+
+  const isBonusFound =
+    gameMode === GameMode.TEAM
+      ? isMyTeamBonusAnswered || hasPlayerBonusAnswered
+      : hasPlayerBonusAnswered;
 
   // Écran de saisie du pseudo si non renseigné
   if (!hasJoined) {
@@ -562,42 +693,141 @@ export default function PlayPage() {
               )}
             </div>
 
-            {hasAnsweredCorrectly ? (
-              <div className="flex flex-col items-center justify-center p-6 bg-green-50 dark:bg-green-950/40 border border-green-200 dark:border-green-800 rounded-xl text-center gap-3">
-                <div className="w-12 h-12 rounded-full bg-green-100 dark:bg-green-900/50 flex items-center justify-center text-green-600 dark:text-green-400 text-2xl font-bold">
-                  ✓
+            {isMainFound ? (
+              artistBonusEnabled ? (
+                isBonusFound ? (
+                  <div className="flex flex-col items-center justify-center p-6 bg-green-50 dark:bg-green-950/40 border border-green-200 dark:border-green-800 rounded-xl text-center gap-3">
+                    <div className="w-14 h-14 rounded-full bg-green-100 dark:bg-green-900/50 flex items-center justify-center text-green-600 dark:text-green-400 text-3xl font-bold">
+                      🎉
+                    </div>
+                    <div>
+                      <h3 className="text-lg font-bold text-green-800 dark:text-green-300">
+                        Morceau & Artiste trouvés !
+                      </h3>
+                      <p className="text-sm text-green-600 dark:text-green-400 mt-1 font-semibold flex items-center justify-center gap-1">
+                        <span>⭐</span> Bonus Artiste validé (+50 pts)
+                      </p>
+                      <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-2">
+                        En attente de la fin de la manche...
+                      </p>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex flex-col gap-4">
+                    <div className="flex items-center gap-3 p-4 bg-green-50 dark:bg-green-950/40 border border-green-200 dark:border-green-800 rounded-xl">
+                      <div className="w-10 h-10 rounded-full bg-green-100 dark:bg-green-900/50 flex items-center justify-center text-green-600 dark:text-green-400 text-xl font-bold shrink-0">
+                        ✓
+                      </div>
+                      <div>
+                        <h3 className="text-sm font-bold text-green-800 dark:text-green-300">
+                          {hasAnsweredCorrectly
+                            ? 'Bonne réponse ! Morceau trouvé !'
+                            : 'Votre équipe a trouvé le morceau !'}
+                        </h3>
+                        <p className="text-xs text-green-600 dark:text-green-400">
+                          {gameMode === GameMode.TEAM
+                            ? 'Points de manche remportés pour l’équipe.'
+                            : 'Points de manche remportés.'}
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Formulaire Bonus Artiste */}
+                    <div className="flex flex-col gap-3 p-5 bg-amber-50/80 dark:bg-amber-950/30 border-2 border-amber-300 dark:border-amber-800 rounded-xl shadow-xs">
+                      <div className="flex items-center gap-2">
+                        <span className="text-2xl">⭐</span>
+                        <div>
+                          <h4 className="text-base font-bold text-amber-900 dark:text-amber-200">
+                            Bonus Artiste (+50 pts)
+                          </h4>
+                          <p className="text-xs text-amber-700 dark:text-amber-400">
+                            Donnez le nom de l&apos;artiste ou de l&apos;interprète pour gagner des points bonus !
+                          </p>
+                        </div>
+                      </div>
+
+                      <form onSubmit={handleSendBonusAnswer} className="flex flex-col gap-3 mt-1">
+                        <div className="flex flex-col gap-1.5">
+                          <label
+                            htmlFor="bonusArtistInput"
+                            className="text-xs font-semibold text-zinc-700 dark:text-zinc-300 uppercase tracking-wider"
+                          >
+                            Nom de l&apos;artiste :
+                          </label>
+                          <input
+                            id="bonusArtistInput"
+                            type="text"
+                            value={artistAnswer}
+                            onChange={(e) => setArtistAnswer(e.target.value)}
+                            placeholder="Écrivez le nom de l'artiste..."
+                            autoFocus
+                            autoComplete="off"
+                            autoCorrect="off"
+                            autoCapitalize="none"
+                            spellCheck={false}
+                            className="px-4 py-3 border border-amber-300 dark:border-amber-700 rounded-lg bg-white dark:bg-zinc-900 focus:outline-none focus:ring-2 focus:ring-amber-500 text-zinc-900 dark:text-white text-base"
+                          />
+                        </div>
+
+                        <button
+                          type="submit"
+                          disabled={!artistAnswer.trim()}
+                          className="w-full rounded-lg bg-amber-500 hover:bg-amber-600 text-amber-950 font-bold px-5 py-3 text-base shadow-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+                        >
+                          ⭐ Valider l&apos;artiste (+50 pts)
+                        </button>
+                      </form>
+
+                      {submittedBonusAnswer && (
+                        <div className="p-2.5 bg-amber-100/80 dark:bg-amber-900/40 border border-amber-300 dark:border-amber-800 rounded-lg text-center">
+                          <span className="text-xs text-amber-800 dark:text-amber-300 block font-medium">
+                            Dernière tentative d&apos;artiste :
+                          </span>
+                          <span className="text-zinc-900 dark:text-white font-semibold text-sm">
+                            &quot;{submittedBonusAnswer}&quot;
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )
+              ) : hasAnsweredCorrectly ? (
+                <div className="flex flex-col items-center justify-center p-6 bg-green-50 dark:bg-green-950/40 border border-green-200 dark:border-green-800 rounded-xl text-center gap-3">
+                  <div className="w-12 h-12 rounded-full bg-green-100 dark:bg-green-900/50 flex items-center justify-center text-green-600 dark:text-green-400 text-2xl font-bold">
+                    ✓
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-bold text-green-800 dark:text-green-300">
+                      Bonne réponse !
+                    </h3>
+                    <p className="text-sm text-green-600 dark:text-green-400 mt-1">
+                      {gameMode === GameMode.TEAM
+                        ? 'Vous avez marqué des points pour votre équipe !'
+                        : 'En attente de la fin de la manche...'}
+                    </p>
+                    <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-2">
+                      En attente de la fin de la manche...
+                    </p>
+                  </div>
                 </div>
-                <div>
-                  <h3 className="text-lg font-bold text-green-800 dark:text-green-300">
-                    Bonne réponse !
-                  </h3>
-                  <p className="text-sm text-green-600 dark:text-green-400 mt-1">
-                    {gameMode === GameMode.TEAM
-                      ? 'Vous avez marqué des points pour votre équipe !'
-                      : 'En attente de la fin de la manche...'}
-                  </p>
-                  <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-2">
-                    En attente de la fin de la manche...
-                  </p>
+              ) : (
+                <div className="flex flex-col items-center justify-center p-6 bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-800 rounded-xl text-center gap-3">
+                  <div className="w-12 h-12 rounded-full bg-indigo-100 dark:bg-indigo-900/50 flex items-center justify-center text-indigo-600 dark:text-indigo-400 text-2xl font-bold">
+                    👥
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-bold text-indigo-900 dark:text-indigo-200">
+                      Votre équipe a trouvé la réponse !
+                    </h3>
+                    <p className="text-sm text-indigo-700 dark:text-indigo-300 mt-1">
+                      Un coéquipier a validé la bonne réponse (1 seule bonne réponse par équipe).
+                    </p>
+                    <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-2">
+                      En attente de la fin de la manche...
+                    </p>
+                  </div>
                 </div>
-              </div>
-            ) : isTeammateAnswered ? (
-              <div className="flex flex-col items-center justify-center p-6 bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-800 rounded-xl text-center gap-3">
-                <div className="w-12 h-12 rounded-full bg-indigo-100 dark:bg-indigo-900/50 flex items-center justify-center text-indigo-600 dark:text-indigo-400 text-2xl font-bold">
-                  👥
-                </div>
-                <div>
-                  <h3 className="text-lg font-bold text-indigo-900 dark:text-indigo-200">
-                    Votre équipe a trouvé la réponse !
-                  </h3>
-                  <p className="text-sm text-indigo-700 dark:text-indigo-300 mt-1">
-                    Un coéquipier a validé la bonne réponse (1 seule bonne réponse par équipe).
-                  </p>
-                  <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-2">
-                    En attente de la fin de la manche...
-                  </p>
-                </div>
-              </div>
+              )
             ) : (
               <>
                 <form onSubmit={handleSendAnswer} className="flex flex-col gap-4">
@@ -606,14 +836,18 @@ export default function PlayPage() {
                       htmlFor="answerInput"
                       className="text-sm font-medium text-zinc-700 dark:text-zinc-300"
                     >
-                      Votre réponse (Titre / Artiste)
+                      {artistBonusEnabled ? 'Titre du morceau' : 'Votre réponse (Titre / Artiste)'}
                     </label>
                     <input
                       id="answerInput"
                       type="text"
                       value={answer}
                       onChange={(e) => setAnswer(e.target.value)}
-                      placeholder="Écrivez votre réponse ici..."
+                      placeholder={
+                        artistBonusEnabled
+                          ? 'Écrivez le titre du morceau...'
+                          : 'Écrivez votre réponse ici...'
+                      }
                       autoFocus
                       autoComplete="off"
                       autoCorrect="off"
@@ -628,7 +862,7 @@ export default function PlayPage() {
                     disabled={!answer.trim()}
                     className="w-full rounded-lg bg-indigo-600 px-6 py-3 text-white font-semibold shadow-md hover:bg-indigo-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer text-lg"
                   >
-                    Valider
+                    Valider le titre
                   </button>
                 </form>
 

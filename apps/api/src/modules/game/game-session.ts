@@ -12,9 +12,12 @@ export class GameSession {
   masterId: string;
   gameMode: GameMode;
   teams: Team[];
+  artistBonusEnabled: boolean;
   roundStartTime: number = 0;
   correctPlayersForCurrentRound: Set<string> = new Set();
   correctTeamsForCurrentRound: Set<string> = new Set();
+  bonusPlayersForCurrentRound: Set<string> = new Set();
+  bonusTeamsForCurrentRound: Set<string> = new Set();
   tracks: MusicTrack[] = [];
   private roundTimer?: NodeJS.Timeout;
   private roundResolver?: () => void;
@@ -24,7 +27,8 @@ export class GameSession {
     masterId: string,
     totalRounds: number = 5,
     gameMode: GameMode = GameMode.SOLO,
-    teams?: Team[]
+    teams?: Team[],
+    artistBonusEnabled: boolean = false,
   ) {
     this.code = code;
     this.state = GameState.LOBBY;
@@ -34,6 +38,12 @@ export class GameSession {
     this.masterId = masterId;
     this.gameMode = gameMode;
     this.teams = teams ? [...teams] : DEFAULT_TEAMS.slice(0, 2).map(t => ({ ...t, score: 0 }));
+    this.artistBonusEnabled = artistBonusEnabled;
+  }
+
+  setArtistBonusEnabled(enabled: boolean): boolean {
+    this.artistBonusEnabled = Boolean(enabled);
+    return this.artistBonusEnabled;
   }
 
   setTotalRounds(rounds: number): number {
@@ -122,6 +132,8 @@ export class GameSession {
     this.roundStartTime = Math.floor(Date.now() / 1000);
     this.correctPlayersForCurrentRound.clear();
     this.correctTeamsForCurrentRound.clear();
+    this.bonusPlayersForCurrentRound.clear();
+    this.bonusTeamsForCurrentRound.clear();
   }
 
   resetGame() {
@@ -129,6 +141,8 @@ export class GameSession {
     this.roundStartTime = 0;
     this.correctPlayersForCurrentRound.clear();
     this.correctTeamsForCurrentRound.clear();
+    this.bonusPlayersForCurrentRound.clear();
+    this.bonusTeamsForCurrentRound.clear();
     this.tracks = [];
     if (this.roundTimer) {
       clearTimeout(this.roundTimer);
@@ -158,6 +172,14 @@ export class GameSession {
     return this.correctTeamsForCurrentRound.has(teamId);
   }
 
+  hasPlayerAnsweredBonus(playerId: string): boolean {
+    return this.bonusPlayersForCurrentRound.has(playerId);
+  }
+
+  hasTeamAnsweredBonus(teamId: string): boolean {
+    return this.bonusTeamsForCurrentRound.has(teamId);
+  }
+
   canPlayerAnswer(playerId: string): boolean {
     if (this.correctPlayersForCurrentRound.has(playerId)) {
       return false;
@@ -173,11 +195,52 @@ export class GameSession {
     return true;
   }
 
+  canPlayerAnswerBonus(playerId: string): boolean {
+    if (!this.artistBonusEnabled) {
+      return false;
+    }
+
+    const player = this.players.find((p) => p.id === playerId);
+    if (!player) return false;
+
+    // Le joueur ou son équipe doit avoir trouvé la réponse principale
+    const hasMainAnswer =
+      this.gameMode === GameMode.TEAM && player.teamId
+        ? this.hasTeamAnsweredCorrectly(player.teamId)
+        : this.hasPlayerAnsweredCorrectly(playerId);
+
+    if (!hasMainAnswer) {
+      return false;
+    }
+
+    // Le joueur ne doit pas avoir déjà validé le bonus
+    if (this.bonusPlayersForCurrentRound.has(playerId)) {
+      return false;
+    }
+
+    // En mode équipe : 1 seul bonus par équipe
+    if (this.gameMode === GameMode.TEAM && player.teamId) {
+      if (this.bonusTeamsForCurrentRound.has(player.teamId)) {
+        return false;
+      }
+    }
+
+    return true;
+  }
+
   recordCorrectAnswer(playerId: string) {
     this.correctPlayersForCurrentRound.add(playerId);
     const player = this.players.find((p) => p.id === playerId);
     if (player?.teamId) {
       this.correctTeamsForCurrentRound.add(player.teamId);
+    }
+  }
+
+  recordCorrectBonusAnswer(playerId: string) {
+    this.bonusPlayersForCurrentRound.add(playerId);
+    const player = this.players.find((p) => p.id === playerId);
+    if (player?.teamId) {
+      this.bonusTeamsForCurrentRound.add(player.teamId);
     }
   }
 
@@ -212,10 +275,39 @@ export class GameSession {
             )
           : true;
 
-      return allActiveTeamsAnswered && allUnassignedAnswered;
+      if (!allActiveTeamsAnswered || !allUnassignedAnswered) {
+        return false;
+      }
+
+      if (this.artistBonusEnabled) {
+        const allActiveTeamsBonus =
+          activeTeamIds.size > 0
+            ? Array.from(activeTeamIds).every((teamId) =>
+                this.bonusTeamsForCurrentRound.has(teamId)
+              )
+            : true;
+        const allUnassignedBonus =
+          unassignedPlayers.length > 0
+            ? unassignedPlayers.every((p) =>
+                this.bonusPlayersForCurrentRound.has(p.id)
+              )
+            : true;
+        return allActiveTeamsBonus && allUnassignedBonus;
+      }
+
+      return true;
     }
 
-    return this.players.every((p) => this.correctPlayersForCurrentRound.has(p.id));
+    const allMain = this.players.every((p) => this.correctPlayersForCurrentRound.has(p.id));
+    if (!allMain) {
+      return false;
+    }
+
+    if (this.artistBonusEnabled) {
+      return this.players.every((p) => this.bonusPlayersForCurrentRound.has(p.id));
+    }
+
+    return true;
   }
 
   waitForRoundEnd(durationMs: number = 30000): Promise<void> {

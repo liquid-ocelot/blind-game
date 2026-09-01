@@ -41,10 +41,16 @@ export default function RoomPage() {
     setGameMode,
     teams,
     setTeams,
+    artistBonusEnabled,
+    setArtistBonusEnabled,
     correctPlayers,
     correctTeams,
+    bonusPlayers,
+    bonusTeams,
     setCorrectPlayers,
     setCorrectTeams,
+    setBonusPlayers,
+    setBonusTeams,
     clearCorrectAnswers,
     setCode,
   } = useGameStore();
@@ -276,6 +282,7 @@ export default function RoomPage() {
         totalRounds: clamped,
         gameMode,
         teams,
+        artistBonusEnabled,
       });
     }
   };
@@ -289,6 +296,7 @@ export default function RoomPage() {
         totalRounds,
         gameMode: newMode,
         teams,
+        artistBonusEnabled,
       });
     }
   };
@@ -304,6 +312,21 @@ export default function RoomPage() {
         totalRounds,
         gameMode,
         teams: newTeams,
+        artistBonusEnabled,
+      });
+    }
+  };
+
+  // Modification du bonus artiste (réservé au maître de jeu)
+  const handleArtistBonusChange = (enabled: boolean) => {
+    setArtistBonusEnabled(enabled);
+    if (socket && isConnected && isMasterUser) {
+      socket.emit(ClientEvents.UPDATE_SETTINGS, {
+        gameCode: codeGame,
+        totalRounds,
+        gameMode,
+        teams,
+        artistBonusEnabled: enabled,
       });
     }
   };
@@ -362,6 +385,7 @@ export default function RoomPage() {
       players?: Player[];
       gameMode?: GameMode;
       teams?: Team[];
+      artistBonusEnabled?: boolean;
     }) {
       setState(GameState.COUNTDOWN);
       clearCorrectAnswers();
@@ -369,6 +393,9 @@ export default function RoomPage() {
       if (data?.totalRounds) setTotalRounds(data.totalRounds);
       if (data?.gameMode) setGameMode(data.gameMode);
       if (data?.teams) setTeams(data.teams);
+      if (typeof data?.artistBonusEnabled === 'boolean') {
+        setArtistBonusEnabled(data.artistBonusEnabled);
+      }
       if (data?.tracks && data.tracks.length > 0) {
         setTracks(data.tracks);
       }
@@ -389,16 +416,24 @@ export default function RoomPage() {
       startTime?: number;
       gameMode?: GameMode;
       teams?: Team[];
+      artistBonusEnabled?: boolean;
       correctPlayers?: string[];
       correctTeams?: string[];
+      bonusPlayers?: string[];
+      bonusTeams?: string[];
     }) {
       setState(GameState.PLAYING);
       setCurrentRound(data.currentRound);
       setTotalRounds(data.totalRounds);
       if (data?.gameMode) setGameMode(data.gameMode);
       if (data?.teams) setTeams(data.teams);
+      if (typeof data?.artistBonusEnabled === 'boolean') {
+        setArtistBonusEnabled(data.artistBonusEnabled);
+      }
       setCorrectPlayers(data?.correctPlayers || []);
       setCorrectTeams(data?.correctTeams || []);
+      setBonusPlayers(data?.bonusPlayers || []);
+      setBonusTeams(data?.bonusTeams || []);
       setTimeLeft(data.duration || 30);
       setShowTitle(false);
 
@@ -425,6 +460,11 @@ export default function RoomPage() {
       track?: MusicTrack;
       gameMode?: GameMode;
       teams?: Team[];
+      artistBonusEnabled?: boolean;
+      correctPlayers?: string[];
+      correctTeams?: string[];
+      bonusPlayers?: string[];
+      bonusTeams?: string[];
     }) {
       setState(GameState.RESULTS);
       clearCorrectAnswers();
@@ -439,6 +479,9 @@ export default function RoomPage() {
       }
       if (data?.teams) {
         setTeams(data.teams);
+      }
+      if (typeof data?.artistBonusEnabled === 'boolean') {
+        setArtistBonusEnabled(data.artistBonusEnabled);
       }
     }
 
@@ -455,6 +498,8 @@ export default function RoomPage() {
       teamScores?: Team[];
       correctPlayers?: string[];
       correctTeams?: string[];
+      bonusPlayers?: string[];
+      bonusTeams?: string[];
     }) {
       if (data?.players) {
         setPlayers(data.players);
@@ -467,6 +512,12 @@ export default function RoomPage() {
       }
       if (data?.correctTeams) {
         setCorrectTeams(data.correctTeams);
+      }
+      if (data?.bonusPlayers) {
+        setBonusPlayers(data.bonusPlayers);
+      }
+      if (data?.bonusTeams) {
+        setBonusTeams(data.bonusTeams);
       }
     }
 
@@ -493,6 +544,7 @@ export default function RoomPage() {
       totalRounds?: number;
       gameMode?: GameMode;
       teams?: Team[];
+      artistBonusEnabled?: boolean;
     }) {
       if (data?.totalRounds) {
         setTotalRounds(data.totalRounds);
@@ -502,6 +554,9 @@ export default function RoomPage() {
       }
       if (data?.teams) {
         setTeams(data.teams);
+      }
+      if (typeof data?.artistBonusEnabled === 'boolean') {
+        setArtistBonusEnabled(data.artistBonusEnabled);
       }
     }
 
@@ -539,11 +594,14 @@ export default function RoomPage() {
     setTotalRounds,
     setGameMode,
     setTeams,
+    setArtistBonusEnabled,
     setCode,
     playTrack,
     stopAudio,
     setCorrectPlayers,
     setCorrectTeams,
+    setBonusPlayers,
+    setBonusTeams,
     clearCorrectAnswers,
   ]);
 
@@ -995,10 +1053,15 @@ export default function RoomPage() {
                 </p>
               </div>
 
-              <div className="flex items-center gap-3">
+              <div className="flex flex-wrap items-center gap-2 sm:gap-3">
                 <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-white dark:bg-zinc-900 rounded-lg border border-zinc-200 dark:border-zinc-700 text-xs font-bold text-indigo-600 dark:text-indigo-400 shadow-sm">
                   {gameMode === GameMode.TEAM ? '👥 Mode Équipes' : '👤 Mode Solo'}
                 </span>
+                {artistBonusEnabled && (
+                  <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-amber-50 dark:bg-amber-950/40 rounded-lg border border-amber-200 dark:border-amber-800 text-xs font-bold text-amber-700 dark:text-amber-300 shadow-sm">
+                    ⭐ Bonus Artiste
+                  </span>
+                )}
                 <span className="text-xl font-mono font-black text-indigo-600 dark:text-indigo-400 px-3 py-1 bg-white dark:bg-zinc-900 rounded-lg border border-zinc-200 dark:border-zinc-700 shadow-sm">
                   {totalRounds || 5} manches
                 </span>
@@ -1039,6 +1102,46 @@ export default function RoomPage() {
                 <p className="text-xs text-zinc-500 dark:text-zinc-400">
                   Mode sélectionné : <strong className="text-zinc-700 dark:text-zinc-200">{gameMode === GameMode.TEAM ? 'Par Équipe' : 'Solo'}</strong>
                 </p>
+              )}
+            </div>
+
+            {/* Option Bonus Artiste */}
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 pt-2 border-t border-zinc-200 dark:border-zinc-700/80">
+              <div>
+                <span className="text-xs font-semibold text-zinc-600 dark:text-zinc-300 uppercase tracking-wider block">
+                  Bonus Artiste (+50 pts) :
+                </span>
+                <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
+                  Permet de saisir le nom de l&apos;artiste après avoir trouvé le titre pour remporter des points bonus.
+                </p>
+              </div>
+              {isMasterUser ? (
+                <button
+                  type="button"
+                  onClick={() => handleArtistBonusChange(!artistBonusEnabled)}
+                  className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 ${
+                    artistBonusEnabled ? 'bg-indigo-600' : 'bg-zinc-300 dark:bg-zinc-700'
+                  }`}
+                  role="switch"
+                  aria-checked={artistBonusEnabled}
+                >
+                  <span
+                    aria-hidden="true"
+                    className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                      artistBonusEnabled ? 'translate-x-5' : 'translate-x-0'
+                    }`}
+                  />
+                </button>
+              ) : (
+                <span
+                  className={`px-2.5 py-1 rounded-full text-xs font-semibold ${
+                    artistBonusEnabled
+                      ? 'bg-green-100 dark:bg-green-950 text-green-700 dark:text-green-300'
+                      : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400'
+                  }`}
+                >
+                  {artistBonusEnabled ? '✓ Activé' : '✕ Désactivé'}
+                </span>
               )}
             </div>
 
@@ -1353,6 +1456,11 @@ export default function RoomPage() {
                                 ✓ A trouvé !
                               </span>
                             )}
+                            {state === GameState.PLAYING && bonusTeams.includes(team.id) && (
+                              <span className="text-[10px] font-bold text-amber-700 dark:text-amber-300 bg-amber-100 dark:bg-amber-900/60 px-2 py-0.5 rounded-full border border-amber-300 dark:border-amber-800">
+                                ⭐ Bonus Artiste !
+                              </span>
+                            )}
                             <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300">
                               {teamMembers.length} joueur{teamMembers.length > 1 ? 's' : ''}
                             </span>
@@ -1364,6 +1472,7 @@ export default function RoomPage() {
                           {teamMembers.length > 0 ? (
                             teamMembers.map((member) => {
                               const hasMemberFound = correctPlayers.includes(member.id);
+                              const hasMemberFoundBonus = bonusPlayers.includes(member.id);
                               return (
                                 <div
                                   key={member.id}
@@ -1376,11 +1485,18 @@ export default function RoomPage() {
                                   <span className="font-medium text-zinc-800 dark:text-zinc-200 truncate">
                                     {member.name}
                                   </span>
-                                  {state === GameState.PLAYING && hasMemberFound && (
-                                    <span className="text-[10px] font-bold text-green-600 dark:text-green-400">
-                                      ✓ Réponse validée
-                                    </span>
-                                  )}
+                                  <div className="flex items-center gap-1">
+                                    {state === GameState.PLAYING && hasMemberFound && (
+                                      <span className="text-[10px] font-bold text-green-600 dark:text-green-400">
+                                        ✓ Réponse validée
+                                      </span>
+                                    )}
+                                    {state === GameState.PLAYING && hasMemberFoundBonus && (
+                                      <span className="text-[10px] font-bold text-amber-600 dark:text-amber-400">
+                                        ⭐ + Bonus
+                                      </span>
+                                    )}
+                                  </div>
                                 </div>
                               );
                             })
@@ -1425,6 +1541,7 @@ export default function RoomPage() {
               <ul className="grid grid-cols-1 sm:grid-cols-2 gap-2 w-full">
                 {players.map((player) => {
                   const hasPlayerFound = correctPlayers.includes(player.id);
+                  const hasPlayerFoundBonus = bonusPlayers.includes(player.id);
                   return (
                     <li
                       key={player.id}
@@ -1442,11 +1559,18 @@ export default function RoomPage() {
                           {player.name}
                         </span>
                       </div>
-                      {hasPlayerFound && state === GameState.PLAYING && (
-                        <span className="text-xs font-bold text-green-700 dark:text-green-300 bg-green-100 dark:bg-green-900/60 px-2 py-0.5 rounded-full border border-green-300 dark:border-green-800 shrink-0">
-                          ✓ A trouvé !
-                        </span>
-                      )}
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        {hasPlayerFound && state === GameState.PLAYING && (
+                          <span className="text-xs font-bold text-green-700 dark:text-green-300 bg-green-100 dark:bg-green-900/60 px-2 py-0.5 rounded-full border border-green-300 dark:border-green-800">
+                            ✓ A trouvé !
+                          </span>
+                        )}
+                        {hasPlayerFoundBonus && state === GameState.PLAYING && (
+                          <span className="text-xs font-bold text-amber-700 dark:text-amber-300 bg-amber-100 dark:bg-amber-900/60 px-2 py-0.5 rounded-full border border-amber-300 dark:border-amber-800">
+                            ⭐ Bonus Artiste !
+                          </span>
+                        )}
+                      </div>
                     </li>
                   );
                 })}

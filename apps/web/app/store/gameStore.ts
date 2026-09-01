@@ -25,8 +25,11 @@ export interface GameStoreState {
   totalRounds: number;
   gameMode: GameMode;
   teams: Team[];
+  artistBonusEnabled: boolean;
   correctPlayers: string[];
   correctTeams: string[];
+  bonusPlayers: string[];
+  bonusTeams: string[];
   masterId: string | null | undefined;
   playerName: string | null;
 
@@ -43,9 +46,13 @@ export interface GameStoreState {
   setTotalRounds: (total: number) => void;
   setGameMode: (gameMode: GameMode) => void;
   setTeams: (teams: Team[]) => void;
+  setArtistBonusEnabled: (enabled: boolean) => void;
   setCorrectPlayers: (correctPlayers: string[]) => void;
   setCorrectTeams: (correctTeams: string[]) => void;
+  setBonusPlayers: (bonusPlayers: string[]) => void;
+  setBonusTeams: (bonusTeams: string[]) => void;
   addCorrectAnswer: (playerId: string, teamId?: string | null) => void;
+  addBonusAnswer: (playerId: string, teamId?: string | null) => void;
   clearCorrectAnswers: () => void;
   setMasterId: (masterId: string | null | undefined) => void;
   setPlayerName: (name: string | null) => void;
@@ -60,8 +67,11 @@ const initialState = {
   totalRounds: 5,
   gameMode: GameMode.SOLO,
   teams: DEFAULT_TEAMS.slice(0, 2),
+  artistBonusEnabled: false,
   correctPlayers: [],
   correctTeams: [],
+  bonusPlayers: [],
+  bonusTeams: [],
   masterId: null,
   playerName: null,
 };
@@ -124,9 +134,15 @@ export const useGameStore = create<GameStoreState>((set) => ({
 
   setTeams: (teams) => set({ teams }),
 
+  setArtistBonusEnabled: (artistBonusEnabled) => set({ artistBonusEnabled }),
+
   setCorrectPlayers: (correctPlayers) => set({ correctPlayers }),
 
   setCorrectTeams: (correctTeams) => set({ correctTeams }),
+
+  setBonusPlayers: (bonusPlayers) => set({ bonusPlayers }),
+
+  setBonusTeams: (bonusTeams) => set({ bonusTeams }),
 
   addCorrectAnswer: (playerId, teamId) =>
     set((prev) => ({
@@ -139,7 +155,24 @@ export const useGameStore = create<GameStoreState>((set) => ({
           : prev.correctTeams,
     })),
 
-  clearCorrectAnswers: () => set({ correctPlayers: [], correctTeams: [] }),
+  addBonusAnswer: (playerId, teamId) =>
+    set((prev) => ({
+      bonusPlayers: prev.bonusPlayers.includes(playerId)
+        ? prev.bonusPlayers
+        : [...prev.bonusPlayers, playerId],
+      bonusTeams:
+        teamId && !prev.bonusTeams.includes(teamId)
+          ? [...prev.bonusTeams, teamId]
+          : prev.bonusTeams,
+    })),
+
+  clearCorrectAnswers: () =>
+    set({
+      correctPlayers: [],
+      correctTeams: [],
+      bonusPlayers: [],
+      bonusTeams: [],
+    }),
 
   setMasterId: (masterId) => set({ masterId }),
 
