@@ -615,6 +615,10 @@ export default function PlayPage() {
                       onChange={(e) => setAnswer(e.target.value)}
                       placeholder="Écrivez votre réponse ici..."
                       autoFocus
+                      autoComplete="off"
+                      autoCorrect="off"
+                      autoCapitalize="none"
+                      spellCheck={false}
                       className="px-4 py-3 border border-zinc-300 dark:border-zinc-700 rounded-lg bg-transparent focus:outline-none focus:ring-2 focus:ring-indigo-500 text-zinc-900 dark:text-white text-lg"
                     />
                   </div>
