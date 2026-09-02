@@ -19,6 +19,7 @@ export class GameSession {
   bonusPlayersForCurrentRound: Set<string> = new Set();
   bonusTeamsForCurrentRound: Set<string> = new Set();
   tracks: MusicTrack[] = [];
+  playedTrackIds: Set<string> = new Set();
   private roundTimer?: NodeJS.Timeout;
   private roundResolver?: () => void;
 
@@ -155,6 +156,20 @@ export class GameSession {
     for (const team of this.teams) {
       team.score = 0;
     }
+  }
+
+  resetPlayedTracks() {
+    this.playedTrackIds.clear();
+  }
+
+  markTrackAsPlayed(trackId: string) {
+    if (trackId) {
+      this.playedTrackIds.add(trackId);
+    }
+  }
+
+  hasTrackBeenPlayed(trackId: string): boolean {
+    return this.playedTrackIds.has(trackId);
   }
 
   getCurrentTrack(): MusicTrack | undefined {

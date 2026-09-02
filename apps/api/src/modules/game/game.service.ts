@@ -279,13 +279,75 @@ export class GameService {
     }
   }
 
-  private shuffleTracks(tracks: MusicTrack[]): MusicTrack[] {
+  shuffleTracks(tracks: MusicTrack[]): MusicTrack[] {
     const shuffled = [...tracks];
     for (let i = shuffled.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1));
       [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
     }
     return shuffled;
+  }
+
+  getTrackIdentifier(track: MusicTrack): string {
+    return (
+      track.filename ||
+      track.id ||
+      track.title ||
+      (track as any).name ||
+      track.url ||
+      ''
+    );
+  }
+
+  selectTracksForGame(
+    availableTracks: MusicTrack[],
+    totalRounds: number,
+    game: GameSession,
+  ): MusicTrack[] {
+    if (!availableTracks || availableTracks.length === 0) {
+      return game.tracks.length > 0 ? game.tracks : [];
+    }
+
+    const unplayedTracks = availableTracks.filter(
+      (track) => !game.hasTrackBeenPlayed(this.getTrackIdentifier(track)),
+    );
+
+    let selectedTracks: MusicTrack[] = [];
+
+    if (unplayedTracks.length >= totalRounds) {
+      const shuffledUnplayed = this.shuffleTracks(unplayedTracks);
+      selectedTracks = shuffledUnplayed.slice(0, totalRounds);
+      for (const track of selectedTracks) {
+        game.markTrackAsPlayed(this.getTrackIdentifier(track));
+      }
+    } else if (unplayedTracks.length > 0) {
+      const shuffledUnplayed = this.shuffleTracks(unplayedTracks);
+      const alreadyPlayedTracks = availableTracks.filter((track) =>
+        game.hasTrackBeenPlayed(this.getTrackIdentifier(track)),
+      );
+      const shuffledPlayed = this.shuffleTracks(alreadyPlayedTracks);
+      const needed = totalRounds - shuffledUnplayed.length;
+      const additionalTracks = shuffledPlayed.slice(0, needed);
+
+      selectedTracks = this.shuffleTracks([
+        ...shuffledUnplayed,
+        ...additionalTracks,
+      ]);
+
+      game.resetPlayedTracks();
+      for (const track of selectedTracks) {
+        game.markTrackAsPlayed(this.getTrackIdentifier(track));
+      }
+    } else {
+      game.resetPlayedTracks();
+      const shuffled = this.shuffleTracks(availableTracks);
+      selectedTracks = shuffled.slice(0, totalRounds);
+      for (const track of selectedTracks) {
+        game.markTrackAsPlayed(this.getTrackIdentifier(track));
+      }
+    }
+
+    return selectedTracks;
   }
 
   private sleep(ms: number): Promise<void> {
@@ -307,7 +369,7 @@ export class GameService {
     const room = `game:${game.code}`;
     const totalRounds = game.totalRounds || 5;
     const availableTracks = this.musicService.getAvailableTracks();
-    game.tracks = this.shuffleTracks(availableTracks);
+    game.tracks = this.selectTracksForGame(availableTracks, totalRounds, game);
 
     // 1. Début du compte à rebours avant la partie
     game.state = GameState.COUNTDOWN;

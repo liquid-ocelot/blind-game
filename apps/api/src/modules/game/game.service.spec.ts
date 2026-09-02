@@ -599,4 +599,114 @@ describe('GameService', () => {
       expect(game.haveAllPlayersAnswered()).toBe(true);
     });
   });
+
+  describe('Room track history and replay non-duplication', () => {
+    const mockTracks = [
+      { id: '1', filename: 'song1.mp3', title: 'Song 1', url: '/music/song1.mp3' },
+      { id: '2', filename: 'song2.mp3', title: 'Song 2', url: '/music/song2.mp3' },
+      { id: '3', filename: 'song3.mp3', title: 'Song 3', url: '/music/song3.mp3' },
+      { id: '4', filename: 'song4.mp3', title: 'Song 4', url: '/music/song4.mp3' },
+      { id: '5', filename: 'song5.mp3', title: 'Song 5', url: '/music/song5.mp3' },
+      { id: '6', filename: 'song6.mp3', title: 'Song 6', url: '/music/song6.mp3' },
+      { id: '7', filename: 'song7.mp3', title: 'Song 7', url: '/music/song7.mp3' },
+      { id: '8', filename: 'song8.mp3', title: 'Song 8', url: '/music/song8.mp3' },
+      { id: '9', filename: 'song9.mp3', title: 'Song 9', url: '/music/song9.mp3' },
+      { id: '10', filename: 'song10.mp3', title: 'Song 10', url: '/music/song10.mp3' },
+    ];
+
+    it('should not replay tracks already played in the same room when relaunching a game', () => {
+      const code = service.createGame('master-1');
+      const game = service.getGame(code)!;
+
+      // 1ère partie : 5 manches sur un catalogue de 10 morceaux
+      const game1Tracks = service.selectTracksForGame(mockTracks, 5, game);
+      expect(game1Tracks.length).toBe(5);
+
+      const game1TrackIds = game1Tracks.map((t) => service.getTrackIdentifier(t));
+      for (const id of game1TrackIds) {
+        expect(game.hasTrackBeenPlayed(id)).toBe(true);
+      }
+
+      // Réinitialisation de la partie pour relance dans la même room (resetGame)
+      game.resetGame();
+      // L'historique des morceaux joués doit être conservé
+      expect(game.playedTrackIds.size).toBe(5);
+
+      // 2ème partie : 5 manches
+      const game2Tracks = service.selectTracksForGame(mockTracks, 5, game);
+      expect(game2Tracks.length).toBe(5);
+
+      const game2TrackIds = game2Tracks.map((t) => service.getTrackIdentifier(t));
+
+      // Vérification : aucun morceau de la 1ère partie ne doit être dans la 2ème partie
+      for (const id of game2TrackIds) {
+        expect(game1TrackIds).not.toContain(id);
+      }
+
+      // Après la 2ème partie, les 10 morceaux ont été joués
+      expect(game.playedTrackIds.size).toBe(10);
+    });
+
+    it('should prioritize remaining unplayed tracks when unplayed count < totalRounds', () => {
+      const code = service.createGame('master-1');
+      const game = service.getGame(code)!;
+
+      // 8 morceaux disponibles, 5 manches par partie
+      const eightTracks = mockTracks.slice(0, 8);
+
+      // Partie 1 : 5 morceaux joués
+      const game1Tracks = service.selectTracksForGame(eightTracks, 5, game);
+      expect(game1Tracks.length).toBe(5);
+      const game1TrackIds = game1Tracks.map((t) => service.getTrackIdentifier(t));
+
+      // Il reste 3 morceaux non joués (8 - 5 = 3)
+      const unplayedBeforeGame2 = eightTracks.filter(
+        (t) => !game1TrackIds.includes(service.getTrackIdentifier(t)),
+      );
+      expect(unplayedBeforeGame2.length).toBe(3);
+
+      game.resetGame();
+
+      // Partie 2 : 5 manches demandées alors qu'il ne reste que 3 morceaux non joués
+      const game2Tracks = service.selectTracksForGame(eightTracks, 5, game);
+      expect(game2Tracks.length).toBe(5);
+
+      const game2TrackIds = game2Tracks.map((t) => service.getTrackIdentifier(t));
+
+      // Les 3 morceaux non joués DOIVENT TOUS être présents dans la 2ème partie
+      for (const unplayedTrack of unplayedBeforeGame2) {
+        expect(game2TrackIds).toContain(service.getTrackIdentifier(unplayedTrack));
+      }
+    });
+
+    it('should reset history and recycle tracks when all catalog has been played in the room', () => {
+      const code = service.createGame('master-1');
+      const game = service.getGame(code)!;
+
+      const fiveTracks = mockTracks.slice(0, 5);
+
+      // Partie 1 : joue les 5 morceaux
+      const game1Tracks = service.selectTracksForGame(fiveTracks, 5, game);
+      expect(game1Tracks.length).toBe(5);
+      expect(game.playedTrackIds.size).toBe(5);
+
+      game.resetGame();
+
+      // Partie 2 : tous les 5 morceaux ont déjà été joués -> réinitialisation automatique du cycle
+      const game2Tracks = service.selectTracksForGame(fiveTracks, 5, game);
+      expect(game2Tracks.length).toBe(5);
+      expect(game.playedTrackIds.size).toBe(5);
+    });
+
+    it('should isolate played tracks between different rooms', () => {
+      const code1 = service.createGame('master-1');
+      const code2 = service.createGame('master-2');
+      const game1 = service.getGame(code1)!;
+      const game2 = service.getGame(code2)!;
+
+      service.selectTracksForGame(mockTracks, 5, game1);
+      expect(game1.playedTrackIds.size).toBe(5);
+      expect(game2.playedTrackIds.size).toBe(0);
+    });
+  });
 });
