@@ -32,16 +32,6 @@ export class GameGateway implements OnGatewayInit {
     this.gameService.setServer(server);
   }
 
-  @SubscribeMessage('ping')
-  handlePing(
-    @MessageBody() data: { message: string },
-    @ConnectedSocket() client: Socket,
-  ) {
-    console.log('Ping reçu :', data);
-
-    client.emit('pong', { message: 'Hello JS' });
-  }
-
   @SubscribeMessage(ClientEvents.JOIN_GAME)
   handleJoinGame(
     @MessageBody()
