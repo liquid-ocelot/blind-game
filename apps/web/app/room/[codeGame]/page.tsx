@@ -4,7 +4,7 @@ import { useParams } from 'next/navigation';
 import { useSocketStore } from "@/app/store/socketStore";
 import { useEffect, useRef, useState, useCallback } from "react";
 import { GameState, Player, useGameStore } from "@/app/store/gameStore";
-import { ClientEvents, ServerEvents, GameMode, Team, DEFAULT_TEAMS } from "@blindtest/shared";
+import { ClientEvents, ServerEvents, GameMode, Team, DEFAULT_TEAMS, GameSyncPayload } from "@blindtest/shared";
 import { getApiUrl } from "@/lib/socket";
 
 export interface MusicTrack {
@@ -23,7 +23,7 @@ export default function RoomPage() {
   const rawCodeGame = params.codeGame as string;
   const codeGame = rawCodeGame?.toUpperCase() || '';
 
-  const { socket, isConnected } = useSocketStore();
+  const { socket, isConnected, clientId } = useSocketStore();
   const {
     masterId,
     state,
@@ -78,8 +78,7 @@ export default function RoomPage() {
 
   // Vérification si le client courant est le maître de jeu
   function isMaster(): boolean {
-    const id = socket?.id;
-    return Boolean(id && masterId && masterId === id);
+    return Boolean(clientId && masterId && masterId === clientId);
   }
 
   // Initialisation de l'élément audio HTML5
@@ -402,7 +401,7 @@ export default function RoomPage() {
       if (data?.players) {
         setPlayers(data.players);
       } else {
-        setPlayers((prev) => prev.map((p) => ({ ...p, score: 0 })));
+        setPlayers(useGameStore.getState().players.map((p) => ({ ...p, score: 0 })));
       }
       stopAudio();
     }
@@ -560,6 +559,26 @@ export default function RoomPage() {
       }
     }
 
+    function onSync(data: GameSyncPayload) {
+      if (data.state === 'PLAYING') {
+        setTimeLeft(data.secondsLeft ?? 30);
+        setShowTitle(false);
+        if (data.track?.url && typeof data.audioOffset === 'number') {
+          playTrack(data.track as MusicTrack, data.audioOffset);
+        }
+        return;
+      }
+      if (data.state === 'RESULTS' && data.track) {
+        setActiveTrack(data.track as MusicTrack);
+        setShowTitle(true);
+        return;
+      }
+      if (data.state === 'COUNTDOWN' || data.state === 'FINISHED') {
+        stopAudio();
+        setTimeLeft(null);
+      }
+    }
+
     socket.on(ServerEvents.PLAYER_JOINED, onPlayerJoined);
     socket.on(ServerEvents.PLAYER_UPDATED, onPlayerUpdated);
     socket.on(ServerEvents.PLAYERS_UPDATED, onPlayersUpdated);
@@ -570,6 +589,7 @@ export default function RoomPage() {
     socket.on(ServerEvents.SCORE_UPDATED, onScoreUpdated);
     socket.on(ServerEvents.GAME_FINISHED, onGameFinished);
     socket.on(ServerEvents.ROOM_SETTINGS_UPDATED, onRoomSettingsUpdated);
+    socket.on(ServerEvents.GAME_SYNC, onSync);
 
     return () => {
       socket.off(ServerEvents.PLAYER_JOINED, onPlayerJoined);
@@ -582,6 +602,7 @@ export default function RoomPage() {
       socket.off(ServerEvents.SCORE_UPDATED, onScoreUpdated);
       socket.off(ServerEvents.GAME_FINISHED, onGameFinished);
       socket.off(ServerEvents.ROOM_SETTINGS_UPDATED, onRoomSettingsUpdated);
+      socket.off(ServerEvents.GAME_SYNC, onSync);
     };
   }, [
     isConnected,

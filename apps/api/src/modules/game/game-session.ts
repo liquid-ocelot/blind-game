@@ -14,6 +14,8 @@ export class GameSession {
   teams: Team[];
   artistBonusEnabled: boolean;
   roundStartTime: number = 0;
+  roundDurationSec: number = 30;
+  playbackStartSec: number = 0;
   correctPlayersForCurrentRound: Set<string> = new Set();
   correctTeamsForCurrentRound: Set<string> = new Set();
   bonusPlayersForCurrentRound: Set<string> = new Set();

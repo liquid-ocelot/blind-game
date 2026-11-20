@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { GameMode, Team, DEFAULT_TEAMS, Player as SharedPlayer } from '@blindtest/shared';
+import { GameMode, Team, DEFAULT_TEAMS, GameSyncPayload } from '@blindtest/shared';
 
 export enum GameState {
   LOBBY = 'LOBBY',
@@ -56,6 +56,7 @@ export interface GameStoreState {
   clearCorrectAnswers: () => void;
   setMasterId: (masterId: string | null | undefined) => void;
   setPlayerName: (name: string | null) => void;
+  applySync: (data: GameSyncPayload) => void;
   resetGame: () => void;
 }
 
@@ -177,6 +178,24 @@ export const useGameStore = create<GameStoreState>((set) => ({
   setMasterId: (masterId) => set({ masterId }),
 
   setPlayerName: (playerName) => set({ playerName }),
+
+  applySync: (data) =>
+    set((prev) => ({
+      code: data.code,
+      masterId: data.masterId,
+      state: data.state as GameState,
+      players: data.players,
+      currentRound: data.currentRound,
+      totalRounds: data.totalRounds,
+      gameMode: data.gameMode,
+      teams: data.teams,
+      artistBonusEnabled: data.artistBonusEnabled,
+      correctPlayers: data.correctPlayers,
+      correctTeams: data.correctTeams,
+      bonusPlayers: data.bonusPlayers,
+      bonusTeams: data.bonusTeams,
+      playerName: data.playerName ?? prev.playerName,
+    })),
 
   resetGame: () => set(initialState),
 }));

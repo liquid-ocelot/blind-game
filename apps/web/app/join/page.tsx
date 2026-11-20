@@ -5,12 +5,14 @@ import { useRouter } from 'next/navigation';
 import { useSocketStore } from '../store/socketStore';
 import { useGameStore } from '../store/gameStore';
 import { ClientEvents } from '@blindtest/shared';
+import { saveSocketSession, clearSocketSession } from '@/lib/socket-session';
 
 export default function JoinPage() {
   const [playerName, setPlayerName] = useState('');
   const [gameCode, setGameCode] = useState('');
+  const [error, setError] = useState('');
   const router = useRouter();
-  const { socket, isConnected } = useSocketStore();
+  const { socket, isConnected, clearError } = useSocketStore();
   const { setPlayerName: setStorePlayerName, setCode } = useGameStore();
 
   function handleJoin() {
@@ -18,10 +20,23 @@ export default function JoinPage() {
       const formattedCode = gameCode.trim().toUpperCase();
       const formattedName = playerName.trim();
 
+      setError('');
+      clearError();
       setStorePlayerName(formattedName);
       setCode(formattedCode);
-      socket.emit(ClientEvents.JOIN_GAME, { gameCode: formattedCode, playerName: formattedName });
-      router.push(`/play/${formattedCode}`);
+      saveSocketSession({
+        gameCode: formattedCode,
+        role: 'player',
+        playerName: formattedName,
+      });
+      socket.emit(ClientEvents.JOIN_GAME, { gameCode: formattedCode, playerName: formattedName }, (response) => {
+        if (!response?.ok) {
+          clearSocketSession();
+          setError(response?.error?.message || 'Impossible de rejoindre ce salon');
+          return;
+        }
+        router.push(`/play/${formattedCode}`);
+      });
     }
   }
 
@@ -62,6 +77,10 @@ export default function JoinPage() {
           </div>
         </div>
 
+        {error && (
+          <p className="text-sm text-red-600 dark:text-red-400 text-center">{error}</p>
+        )}
+
         <button
           onClick={handleJoin}
           disabled={!playerName || !gameCode || !isConnected}
@@ -71,7 +90,10 @@ export default function JoinPage() {
         </button>
 
         <button
-          onClick={() => router.push('/')}
+          onClick={() => {
+            clearSocketSession();
+            router.push('/');
+          }}
           className="text-sm text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300 transition-colors"
         >
           Retour à l'accueil

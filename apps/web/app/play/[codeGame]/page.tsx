@@ -4,7 +4,8 @@ import { useParams, useRouter } from 'next/navigation';
 import { useSocketStore } from '@/app/store/socketStore';
 import { useEffect, useState } from 'react';
 import { GameState, Player, useGameStore } from '@/app/store/gameStore';
-import { ClientEvents, ServerEvents, GameMode, Team, DEFAULT_TEAMS } from '@blindtest/shared';
+import { ClientEvents, ServerEvents, GameMode, Team, DEFAULT_TEAMS, GameSyncPayload } from '@blindtest/shared';
+import { clearSocketSession, loadSocketSession, saveSocketSession } from '@/lib/socket-session';
 import Link from 'next/link';
 
 export default function PlayPage() {
@@ -13,7 +14,7 @@ export default function PlayPage() {
   const rawCodeGame = params.codeGame as string;
   const codeGame = rawCodeGame?.toUpperCase() || '';
 
-  const { socket, isConnected } = useSocketStore();
+  const { socket, isConnected, clientId, clearError } = useSocketStore();
   const {
     playerName,
     setPlayerName,
@@ -50,6 +51,7 @@ export default function PlayPage() {
 
   const [inputName, setInputName] = useState(playerName || '');
   const [hasJoined, setHasJoined] = useState(Boolean(playerName));
+  const [joinError, setJoinError] = useState('');
   const [answer, setAnswer] = useState('');
   const [submittedAnswer, setSubmittedAnswer] = useState<string | null>(null);
   const [artistAnswer, setArtistAnswer] = useState('');
@@ -62,25 +64,56 @@ export default function PlayPage() {
   function handleJoinDirectly() {
     if (socket && isConnected && inputName.trim() && codeGame) {
       const formattedName = inputName.trim();
-      setPlayerName(formattedName);
-      setHasJoined(true);
+      setJoinError('');
+      clearError();
       setCode(codeGame);
-      socket.emit(ClientEvents.JOIN_GAME, {
+      saveSocketSession({
         gameCode: codeGame,
+        role: 'player',
         playerName: formattedName,
       });
+      socket.emit(
+        ClientEvents.JOIN_GAME,
+        {
+          gameCode: codeGame,
+          playerName: formattedName,
+        },
+        (response) => {
+          if (!response?.ok) {
+            clearSocketSession();
+            setJoinError(response?.error?.message || 'Impossible de rejoindre ce salon');
+            return;
+          }
+          setPlayerName(formattedName);
+          setHasJoined(true);
+        },
+      );
     }
   }
+
+  useEffect(() => {
+    const session = loadSocketSession();
+    if (session?.role === 'player' && session.playerName && session.gameCode === codeGame) {
+      setPlayerName(session.playerName);
+      setInputName(session.playerName);
+      setHasJoined(true);
+      return;
+    }
+    if (playerName) {
+      setHasJoined(true);
+      setInputName(playerName);
+    }
+  }, [playerName, codeGame, setPlayerName]);
 
   // Choisir une équipe
   function handleSelectTeam(teamId: string | null) {
     if (socket && isConnected) {
       socket.emit(ClientEvents.SELECT_TEAM, {
-        gameCode: codeGame || code,
+        gameCode: codeGame || code || '',
         teamId,
       });
-      if (socket.id) {
-        setPlayerTeam(socket.id, teamId);
+      if (clientId) {
+        setPlayerTeam(clientId, teamId);
       }
     }
   }
@@ -176,7 +209,7 @@ export default function PlayPage() {
       if (data?.players) {
         setPlayers(data.players);
       } else {
-        setPlayers((prev) => prev.map((p) => ({ ...p, score: 0 })));
+        setPlayers(useGameStore.getState().players.map((p) => ({ ...p, score: 0 })));
       }
     }
 
@@ -310,8 +343,8 @@ export default function PlayPage() {
     }) {
       console.log(data.newScore);
       setHasAnsweredCorrectly(true);
-      if (socket?.id) {
-        updateScore(socket.id, data.newScore);
+      if (clientId) {
+        updateScore(clientId, data.newScore);
       }
       if (data?.teamScores) {
         setTeams(data.teamScores);
@@ -345,8 +378,8 @@ export default function PlayPage() {
     }) {
       console.log('Bonus answer valid:', data);
       setHasBonusAnswered(true);
-      if (socket?.id) {
-        updateScore(socket.id, data.newScore);
+      if (clientId) {
+        updateScore(clientId, data.newScore);
       }
       if (data?.teamScores) {
         setTeams(data.teamScores);
@@ -388,6 +421,21 @@ export default function PlayPage() {
       }
     }
 
+    function onSync(data: GameSyncPayload) {
+      if (data.playerName) {
+        setHasJoined(true);
+      }
+      if (data.state === 'PLAYING') {
+        setTimeLeft(data.secondsLeft ?? 30);
+        setHasAnsweredCorrectly(Boolean(clientId) && data.correctPlayers.includes(clientId));
+        setHasBonusAnswered(Boolean(clientId) && data.bonusPlayers.includes(clientId));
+        return;
+      }
+      setTimeLeft(null);
+      setHasAnsweredCorrectly(false);
+      setHasBonusAnswered(false);
+    }
+
     socket.on(ServerEvents.PLAYER_JOINED, onPlayerJoined);
     socket.on(ServerEvents.PLAYER_UPDATED, onPlayerUpdated);
     socket.on(ServerEvents.PLAYERS_UPDATED, onPlayersUpdated);
@@ -400,6 +448,7 @@ export default function PlayPage() {
     socket.on(ServerEvents.BONUS_VALID_ANSWER, onBonusGoodAnswer);
     socket.on(ServerEvents.GAME_FINISHED, onGameFinished);
     socket.on(ServerEvents.ROOM_SETTINGS_UPDATED, onRoomSettingsUpdated);
+    socket.on(ServerEvents.GAME_SYNC, onSync);
 
     return () => {
       socket.off(ServerEvents.PLAYER_JOINED, onPlayerJoined);
@@ -414,6 +463,7 @@ export default function PlayPage() {
       socket.off(ServerEvents.BONUS_VALID_ANSWER, onBonusGoodAnswer);
       socket.off(ServerEvents.GAME_FINISHED, onGameFinished);
       socket.off(ServerEvents.ROOM_SETTINGS_UPDATED, onRoomSettingsUpdated);
+      socket.off(ServerEvents.GAME_SYNC, onSync);
     };
   }, [
     isConnected,
@@ -434,11 +484,12 @@ export default function PlayPage() {
     setBonusPlayers,
     setBonusTeams,
     clearCorrectAnswers,
+    clientId,
   ]);
 
   // Trouver le joueur courant
   const currentPlayer = players.find(
-    (p) => p.id === socket?.id || (playerName && p.name === playerName)
+    (p) => p.id === clientId || (playerName && p.name === playerName)
   );
 
   const currentTeam = teams.find((t) => t.id === currentPlayer?.teamId);
@@ -454,7 +505,7 @@ export default function PlayPage() {
 
   const hasPlayerBonusAnswered =
     hasBonusAnswered ||
-    (Boolean(socket?.id) && bonusPlayers.includes(socket!.id)) ||
+    (Boolean(clientId) && bonusPlayers.includes(clientId)) ||
     (Boolean(currentPlayer?.id) && bonusPlayers.includes(currentPlayer!.id));
 
   const isMyTeamBonusAnswered =
@@ -498,6 +549,9 @@ export default function PlayPage() {
               className="px-4 py-3 border border-zinc-300 dark:border-zinc-700 rounded-lg bg-transparent focus:outline-none focus:ring-2 focus:ring-indigo-500 text-zinc-900 dark:text-white"
             />
           </div>
+          {joinError && (
+            <p className="text-sm text-red-600 dark:text-red-400 text-center">{joinError}</p>
+          )}
           <button
             onClick={handleJoinDirectly}
             disabled={!inputName.trim() || !isConnected}
@@ -507,6 +561,7 @@ export default function PlayPage() {
           </button>
           <Link
             href="/"
+            onClick={() => clearSocketSession()}
             className="text-sm text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300 transition-colors text-center"
           >
             Retour à l&apos;accueil
@@ -951,7 +1006,7 @@ export default function PlayPage() {
                   .sort((a, b) => (b.score || 0) - (a.score || 0))
                   .map((p, idx) => {
                     const isMe =
-                      p.id === socket?.id || (playerName && p.name === playerName);
+                      p.id === clientId || (playerName && p.name === playerName);
                     const pTeam = teams.find((t) => t.id === p.teamId);
                     return (
                       <li
@@ -1066,7 +1121,7 @@ export default function PlayPage() {
                   .sort((a, b) => (b.score || 0) - (a.score || 0))
                   .map((p, idx) => {
                     const isMe =
-                      p.id === socket?.id || (playerName && p.name === playerName);
+                      p.id === clientId || (playerName && p.name === playerName);
                     const pTeam = teams.find((t) => t.id === p.teamId);
                     return (
                       <li
@@ -1114,7 +1169,10 @@ export default function PlayPage() {
             </p>
 
             <button
-              onClick={() => router.push('/')}
+              onClick={() => {
+                clearSocketSession();
+                router.push('/');
+              }}
               className="w-full mt-2 rounded-lg bg-indigo-600 px-6 py-3 text-white font-semibold shadow-md hover:bg-indigo-700 transition-colors cursor-pointer"
             >
               Retour à l&apos;accueil

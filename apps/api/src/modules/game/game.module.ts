@@ -4,10 +4,11 @@ import { GameService } from "./game.service";
 import { GameSessionManager } from "./game-session.manager";
 import { MusicService } from "./music.service";
 import { MusicController } from "./music.controller";
+import { ConnectionRegistry } from "./connection-registry";
 
 @Module({
     controllers: [MusicController],
-    providers: [GameGateway, GameService, GameSessionManager, MusicService],
+    providers: [GameGateway, GameService, GameSessionManager, MusicService, ConnectionRegistry],
     exports: [MusicService],
 })
 export class GameModule {}

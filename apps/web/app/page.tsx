@@ -3,6 +3,7 @@
 
 import { ClientEvents } from "@blindtest/shared";
 import { useSocketStore } from "./store/socketStore";
+import { clearSocketSession } from "@/lib/socket-session";
 import Link from "next/link";
 
 
@@ -11,6 +12,7 @@ export default function Home() {
 
   function createGame() {
     if (socket && isConnected) {
+      clearSocketSession();
       socket.emit(ClientEvents.CREATE_GAME);
     }
   }

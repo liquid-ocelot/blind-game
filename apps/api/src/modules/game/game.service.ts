@@ -5,6 +5,7 @@ import { GameSession } from './game-session';
 import { GameState } from './game-state';
 import { ServerEvents, GameMode, Team, Player } from '@blindtest/shared';
 import { MusicService, MusicTrack } from './music.service';
+import { resolveClientId } from './client-id';
 
 export function calculateAudioStartTime(
   duration?: number,
@@ -135,7 +136,9 @@ export class GameService {
       : '';
 
     // 1. Réponse principale (Titre, ou Auteur si le bonus n'est pas activé)
-    if (game.canPlayerAnswer(client.id)) {
+    const playerId = resolveClientId(client);
+
+    if (game.canPlayerAnswer(playerId)) {
       const isTitleMatch =
         cleanTitle.length > 0 && cleanAnswer.includes(cleanTitle);
       const isAuthorMatch =
@@ -146,18 +149,18 @@ export class GameService {
         : isTitleMatch || isAuthorMatch;
 
       if (isMainMatch) {
-        this.handleGoodAnswer(client, game);
+        this.handleGoodAnswer(client, game, playerId);
         return;
       }
     }
 
     // 2. Réponse bonus artiste (si activé et joueur/équipe éligible)
-    if (game.canPlayerAnswerBonus(client.id)) {
+    if (game.canPlayerAnswerBonus(playerId)) {
       const isBonusMatch =
         cleanAuthor.length > 0 && cleanAnswer.includes(cleanAuthor);
 
       if (isBonusMatch) {
-        this.handleGoodBonusAnswer(client, game);
+        this.handleGoodBonusAnswer(client, game, playerId);
         return;
       }
     }
@@ -171,8 +174,8 @@ export class GameService {
       .trim();
   }
 
-  private handleGoodAnswer(client: Socket, game: GameSession) {
-    const player = game.players.find(p => p.id === client.id);
+  private handleGoodAnswer(client: Socket, game: GameSession, playerId: string) {
+    const player = game.players.find(p => p.id === playerId);
 
     const roundTime = 30;
     const elapsedTime = Math.max(
@@ -195,7 +198,7 @@ export class GameService {
       player.score = newScore;
     }
 
-    game.recordCorrectAnswer(client.id);
+    game.recordCorrectAnswer(playerId);
 
     const teamScores = game.getTeamScores();
     const correctPlayers = Array.from(game.correctPlayersForCurrentRound);
@@ -231,8 +234,8 @@ export class GameService {
     }
   }
 
-  private handleGoodBonusAnswer(client: Socket, game: GameSession) {
-    const player = game.players.find((p) => p.id === client.id);
+  private handleGoodBonusAnswer(client: Socket, game: GameSession, playerId: string) {
+    const player = game.players.find((p) => p.id === playerId);
     const bonusPoints = 50;
 
     console.log(`player : ${player?.name} earned artist bonus: ${bonusPoints}`);
@@ -242,7 +245,7 @@ export class GameService {
       player.score = newScore;
     }
 
-    game.recordCorrectBonusAnswer(client.id);
+    game.recordCorrectBonusAnswer(playerId);
 
     const teamScores = game.getTeamScores();
     const correctPlayers = Array.from(game.correctPlayersForCurrentRound);
@@ -395,6 +398,8 @@ export class GameService {
         track?.duration,
         track?.startTimes,
       );
+      game.roundDurationSec = 30;
+      game.playbackStartSec = startTime;
 
       this.server?.to(room).emit(ServerEvents.ROUND_STARTED, {
         currentRound: game.currentRound,
