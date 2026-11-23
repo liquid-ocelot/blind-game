@@ -6,6 +6,7 @@ import { useEffect, useRef, useState, useCallback } from "react";
 import { GameState, Player, useGameStore } from "@/app/store/gameStore";
 import { ClientEvents, ServerEvents, GameMode, Team, DEFAULT_TEAMS, GameSyncPayload } from "@blindtest/shared";
 import { getApiUrl } from "@/lib/socket";
+import JoinQrCode from "@/app/components/JoinQrCode";
 
 export interface MusicTrack {
   id: string;
@@ -669,6 +670,9 @@ export default function RoomPage() {
             </span>
           </div>
         </div>
+
+        {/* QR code pour rejoindre le salon */}
+        {state === GameState.LOBBY && <JoinQrCode gameCode={codeGame} />}
 
         {/* Phase COUNTDOWN */}
         {state === GameState.COUNTDOWN && (
