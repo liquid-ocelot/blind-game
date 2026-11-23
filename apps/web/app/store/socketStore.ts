@@ -2,7 +2,11 @@ import { create } from 'zustand';
 import { io } from 'socket.io-client';
 import { ClientEvents, GameErrorPayload, ServerEvents } from '@blindtest/shared';
 import { getSocketUrl, TypedSocket } from '@/lib/socket';
-import { getOrCreateClientId, loadSocketSession } from '@/lib/socket-session';
+import {
+  clearSocketSession,
+  getOrCreateClientId,
+  loadSocketSession,
+} from '@/lib/socket-session';
 import { useGameStore } from './gameStore';
 
 export type ConnectionStatus =
@@ -82,6 +86,15 @@ export const useSocketStore = create<SocketState>((set, get) => ({
       });
 
       socket.on(ServerEvents.ERROR, (error) => {
+        // Une session sauvegardee qui ne correspond plus a aucun salon est
+        // simplement abandonnee, sans afficher d'erreur a l'utilisateur.
+        if (
+          error.event === ClientEvents.RESUME_GAME &&
+          (error.code === 'GAME_NOT_FOUND' || error.code === 'NOT_HOST')
+        ) {
+          clearSocketSession();
+          return;
+        }
         set({ lastError: error });
       });
 
