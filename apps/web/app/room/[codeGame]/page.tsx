@@ -74,6 +74,13 @@ export default function RoomPage() {
   const [showMusicManager, setShowMusicManager] = useState<boolean>(true);
   const [activePreviewId, setActivePreviewId] = useState<string | null>(null);
   const [timeLeft, setTimeLeft] = useState<number | null>(null);
+  // Copie figee des resultats de la partie : le podium reste identique meme si
+  // l'hote change le mode ou les equipes avant de relancer.
+  const [finalResults, setFinalResults] = useState<{
+    players: Player[];
+    gameMode: GameMode;
+    teams: Team[];
+  } | null>(null);
 
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
@@ -388,6 +395,7 @@ export default function RoomPage() {
       artistBonusEnabled?: boolean;
     }) {
       setState(GameState.COUNTDOWN);
+      setFinalResults(null);
       clearCorrectAnswers();
       if (data?.code) setCode(data.code);
       if (data?.totalRounds) setTotalRounds(data.totalRounds);
@@ -526,6 +534,12 @@ export default function RoomPage() {
       gameMode?: GameMode;
       teams?: Team[];
     }) {
+      const current = useGameStore.getState();
+      setFinalResults({
+        players: data?.players ?? current.players,
+        gameMode: data?.gameMode ?? current.gameMode,
+        teams: data?.teams ?? current.teams,
+      });
       setState(GameState.FINISHED);
       clearCorrectAnswers();
       stopAudio();
@@ -561,6 +575,11 @@ export default function RoomPage() {
     }
 
     function onSync(data: GameSyncPayload) {
+      setFinalResults(
+        data.state === 'FINISHED'
+          ? { players: data.players, gameMode: data.gameMode, teams: data.teams }
+          : null,
+      );
       if (data.state === 'PLAYING') {
         setTimeLeft(data.secondsLeft ?? 30);
         setShowTitle(false);
@@ -629,6 +648,7 @@ export default function RoomPage() {
 
   const downloadedCount = Object.keys(downloadedBlobs).length;
   const isMasterUser = isMaster();
+  const results = finalResults ?? { players, gameMode, teams };
 
   return (
     <div className="flex flex-col items-center justify-center min-h-screen bg-zinc-50 dark:bg-black font-sans p-4 sm:p-6">
@@ -945,7 +965,7 @@ export default function RoomPage() {
             </div>
 
             {/* Podium Équipes si Mode Équipe */}
-            {gameMode === GameMode.TEAM && (
+            {results.gameMode === GameMode.TEAM && (
               <div className="w-full max-w-md px-4">
                 <h3 className="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 mb-3 text-left flex items-center justify-between">
                   <span>🏆 Podium des équipes</span>
@@ -954,10 +974,10 @@ export default function RoomPage() {
                   </span>
                 </h3>
                 <ul className="flex flex-col gap-2.5">
-                  {[...teams]
+                  {[...results.teams]
                     .sort((a, b) => (b.score || 0) - (a.score || 0))
                     .map((team, idx) => {
-                      const teamMembers = players.filter((p) => p.teamId === team.id);
+                      const teamMembers = results.players.filter((p) => p.teamId === team.id);
                       return (
                         <li
                           key={team.id}
@@ -1006,18 +1026,18 @@ export default function RoomPage() {
 
             <div className="w-full max-w-md px-4">
               <h3 className="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 mb-3 text-left">
-                {gameMode === GameMode.TEAM ? 'Classement individuel' : 'Podium final'}
+                {results.gameMode === GameMode.TEAM ? 'Classement individuel' : 'Podium final'}
               </h3>
               <ul className="flex flex-col gap-2">
-                {[...players]
+                {[...results.players]
                   .sort((a, b) => (b.score || 0) - (a.score || 0))
                   .map((player, idx) => {
-                    const playerTeam = teams.find((t) => t.id === player.teamId);
+                    const playerTeam = results.teams.find((t) => t.id === player.teamId);
                     return (
                       <li
                         key={player.id}
                         className={`flex items-center justify-between p-3 rounded-lg border ${
-                          idx === 0 && gameMode === GameMode.SOLO
+                          idx === 0 && results.gameMode === GameMode.SOLO
                             ? 'bg-amber-50 dark:bg-amber-950/40 border-amber-300 dark:border-amber-800 font-bold'
                             : 'bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-700'
                         }`}
@@ -1026,7 +1046,7 @@ export default function RoomPage() {
                           <span className="text-base shrink-0">
                             {idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : `${idx + 1}.`}
                           </span>
-                          {gameMode === GameMode.TEAM && playerTeam && (
+                          {results.gameMode === GameMode.TEAM && playerTeam && (
                             <span
                               className="w-2.5 h-2.5 rounded-full shrink-0"
                               style={{ backgroundColor: playerTeam.color }}
@@ -1052,11 +1072,16 @@ export default function RoomPage() {
                   onClick={handleStartGame}
                   className="w-full rounded-xl bg-indigo-600 px-6 py-3.5 text-white font-bold text-base shadow-lg hover:bg-indigo-700 transition-all focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 cursor-pointer shadow-indigo-500/20"
                 >
-                  Relancer une nouvelle partie
+                  Rejouer avec la même configuration
                 </button>
               ) : (
                 <p className="text-sm text-zinc-500 dark:text-zinc-400 italic text-center">
                   En attente de l&apos;hôte pour relancer une partie...
+                </p>
+              )}
+              {isMasterUser && (
+                <p className="mt-2 text-xs text-zinc-500 dark:text-zinc-400 text-center">
+                  Vous pouvez aussi modifier la configuration ci-dessous avant de relancer.
                 </p>
               )}
             </div>
@@ -1064,17 +1089,22 @@ export default function RoomPage() {
         )}
 
         {/* Section Configuration de la room (Nombre de manches & Mode de jeu) */}
-        {state === GameState.LOBBY && (
+        {(state === GameState.LOBBY || state === GameState.FINISHED) && (
           <div className="flex flex-col gap-5 p-5 bg-zinc-50 dark:bg-zinc-800/50 rounded-xl border border-zinc-200 dark:border-zinc-700">
             <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
               <div>
                 <h2 className="text-base font-bold text-zinc-900 dark:text-white flex items-center gap-2">
-                  <span>⚙️</span> Configuration de la partie
+                  <span>⚙️</span>{' '}
+                  {state === GameState.FINISHED ? 'Configuration de la prochaine partie' : 'Configuration de la partie'}
                 </h2>
                 <p className="text-xs text-zinc-500 dark:text-zinc-400">
                   {isMasterUser
-                    ? 'Configurez le mode de jeu, les équipes et le nombre de manches.'
-                    : 'Paramètres configurés par l’hôte pour cette partie.'}
+                    ? state === GameState.FINISHED
+                      ? 'Ajustez le mode, les équipes et le nombre de manches avant de relancer une partie.'
+                      : 'Configurez le mode de jeu, les équipes et le nombre de manches.'
+                    : state === GameState.FINISHED
+                      ? 'L’hôte prépare la prochaine partie.'
+                      : 'Paramètres configurés par l’hôte pour cette partie.'}
                 </p>
               </div>
 
@@ -1608,15 +1638,15 @@ export default function RoomPage() {
           )}
         </div>
 
-        {/* Bouton de démarrage de la partie (Phase LOBBY) */}
-        {state === GameState.LOBBY && (
+        {/* Bouton de démarrage (LOBBY) ou de relance avec la nouvelle configuration (FINISHED, hôte) */}
+        {(state === GameState.LOBBY || (state === GameState.FINISHED && isMasterUser)) && (
           <div className="w-full flex justify-center mt-2">
             {isMasterUser ? (
               <button
                 onClick={handleStartGame}
                 className="w-full rounded-xl bg-indigo-600 px-6 py-3.5 text-white font-bold text-base shadow-lg hover:bg-indigo-700 transition-all focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 cursor-pointer shadow-indigo-500/20"
               >
-                Lancer la partie
+                {state === GameState.FINISHED ? 'Relancer avec cette configuration' : 'Lancer la partie'}
               </button>
             ) : (
               <p className="text-sm text-zinc-500 dark:text-zinc-400 italic text-center">

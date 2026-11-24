@@ -59,6 +59,13 @@ export default function PlayPage() {
   const [timeLeft, setTimeLeft] = useState<number | null>(null);
   const [hasAnsweredCorrectly, setHasAnsweredCorrectly] = useState(false);
   const [hasBonusAnswered, setHasBonusAnswered] = useState(false);
+  // Copie figee des resultats : le podium reste identique meme si l'hote change
+  // la configuration de la room avant de relancer une partie.
+  const [finalResults, setFinalResults] = useState<{
+    players: Player[];
+    gameMode: GameMode;
+    teams: Team[];
+  } | null>(null);
 
   // Gérer la connexion directe si le pseudo n'est pas encore défini
   function handleJoinDirectly() {
@@ -184,6 +191,7 @@ export default function PlayPage() {
       artistBonusEnabled?: boolean;
     }) {
       setState(GameState.COUNTDOWN);
+      setFinalResults(null);
       setHasAnsweredCorrectly(false);
       setHasBonusAnswered(false);
       clearCorrectAnswers();
@@ -317,6 +325,12 @@ export default function PlayPage() {
       gameMode?: GameMode;
       teams?: Team[];
     }) {
+      const current = useGameStore.getState();
+      setFinalResults({
+        players: data?.players ?? current.players,
+        gameMode: data?.gameMode ?? current.gameMode,
+        teams: data?.teams ?? current.teams,
+      });
       setState(GameState.FINISHED);
       setHasAnsweredCorrectly(false);
       setHasBonusAnswered(false);
@@ -422,6 +436,11 @@ export default function PlayPage() {
     }
 
     function onSync(data: GameSyncPayload) {
+      setFinalResults(
+        data.state === 'FINISHED'
+          ? { players: data.players, gameMode: data.gameMode, teams: data.teams }
+          : null,
+      );
       if (data.playerName) {
         setHasJoined(true);
       }
@@ -517,6 +536,77 @@ export default function PlayPage() {
     gameMode === GameMode.TEAM
       ? isMyTeamBonusAnswered || hasPlayerBonusAnswered
       : hasPlayerBonusAnswered;
+
+  // Selecteur d'equipe (mode equipe) : disponible dans le lobby et apres une partie
+  const teamSelector =
+    gameMode === GameMode.TEAM ? (
+      <div className="w-full bg-indigo-50/60 dark:bg-indigo-950/30 p-4 rounded-xl border border-indigo-200 dark:border-indigo-900/50 flex flex-col gap-3 text-left">
+        <div className="flex items-center justify-between">
+          <span className="text-xs font-bold uppercase tracking-wider text-indigo-900 dark:text-indigo-300">
+            Choisissez votre équipe :
+          </span>
+          {currentTeam && (
+            <span
+              className="text-xs font-bold px-2 py-0.5 rounded-full text-white"
+              style={{ backgroundColor: currentTeam.color }}
+            >
+              {currentTeam.name}
+            </span>
+          )}
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+          {teams.map((team) => {
+            const isMyTeam = currentPlayer?.teamId === team.id;
+            const members = players.filter((p) => p.teamId === team.id);
+            return (
+              <button
+                key={team.id}
+                type="button"
+                onClick={() => handleSelectTeam(team.id)}
+                className={`flex flex-col p-3 rounded-lg border transition-all text-left cursor-pointer ${
+                  isMyTeam
+                    ? 'bg-white dark:bg-zinc-900 shadow-md ring-2 ring-offset-1 ring-indigo-500 border-transparent font-bold'
+                    : 'bg-white/80 dark:bg-zinc-900/80 border-zinc-200 dark:border-zinc-700 hover:bg-white dark:hover:bg-zinc-800'
+                }`}
+                style={{ borderLeftColor: team.color, borderLeftWidth: '4px' }}
+              >
+                <div className="flex items-center justify-between w-full">
+                  <span className="text-sm text-zinc-900 dark:text-white font-semibold flex items-center gap-1.5">
+                    <span
+                      className="w-2.5 h-2.5 rounded-full shrink-0"
+                      style={{ backgroundColor: team.color }}
+                    />
+                    {team.name}
+                  </span>
+                  {isMyTeam && (
+                    <span className="text-xs text-indigo-600 dark:text-indigo-400 font-bold">
+                      ✓ Rejoint
+                    </span>
+                  )}
+                </div>
+                <span className="text-[11px] text-zinc-400 mt-1">
+                  {members.length} joueur{members.length > 1 ? 's' : ''}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+
+        {!currentPlayer?.teamId && (
+          <p className="text-[11px] text-zinc-500 dark:text-zinc-400 italic">
+            💡 Si vous ne choisissez pas d&apos;équipe, vous serez assigné automatiquement.
+          </p>
+        )}
+      </div>
+    ) : null;
+
+  // Resultats figes de la derniere partie (voir finalResults)
+  const results = finalResults ?? { players, gameMode, teams };
+  const finalPlayer = results.players.find(
+    (p) => p.id === clientId || (playerName && p.name === playerName),
+  );
+  const finalTeam = results.teams.find((t) => t.id === finalPlayer?.teamId);
 
   // Écran de saisie du pseudo si non renseigné
   if (!hasJoined) {
@@ -615,68 +705,7 @@ export default function PlayPage() {
               </p>
             </div>
 
-            {/* Sélecteur d'équipe si Mode Équipe */}
-            {gameMode === GameMode.TEAM && (
-              <div className="w-full bg-indigo-50/60 dark:bg-indigo-950/30 p-4 rounded-xl border border-indigo-200 dark:border-indigo-900/50 flex flex-col gap-3 text-left">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold uppercase tracking-wider text-indigo-900 dark:text-indigo-300">
-                    Choisissez votre équipe :
-                  </span>
-                  {currentTeam && (
-                    <span
-                      className="text-xs font-bold px-2 py-0.5 rounded-full text-white"
-                      style={{ backgroundColor: currentTeam.color }}
-                    >
-                      {currentTeam.name}
-                    </span>
-                  )}
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  {teams.map((team) => {
-                    const isMyTeam = currentPlayer?.teamId === team.id;
-                    const members = players.filter((p) => p.teamId === team.id);
-                    return (
-                      <button
-                        key={team.id}
-                        type="button"
-                        onClick={() => handleSelectTeam(team.id)}
-                        className={`flex flex-col p-3 rounded-lg border transition-all text-left cursor-pointer ${
-                          isMyTeam
-                            ? 'bg-white dark:bg-zinc-900 shadow-md ring-2 ring-offset-1 ring-indigo-500 border-transparent font-bold'
-                            : 'bg-white/80 dark:bg-zinc-900/80 border-zinc-200 dark:border-zinc-700 hover:bg-white dark:hover:bg-zinc-800'
-                        }`}
-                        style={{ borderLeftColor: team.color, borderLeftWidth: '4px' }}
-                      >
-                        <div className="flex items-center justify-between w-full">
-                          <span className="text-sm text-zinc-900 dark:text-white font-semibold flex items-center gap-1.5">
-                            <span
-                              className="w-2.5 h-2.5 rounded-full shrink-0"
-                              style={{ backgroundColor: team.color }}
-                            />
-                            {team.name}
-                          </span>
-                          {isMyTeam && (
-                            <span className="text-xs text-indigo-600 dark:text-indigo-400 font-bold">
-                              ✓ Rejoint
-                            </span>
-                          )}
-                        </div>
-                        <span className="text-[11px] text-zinc-400 mt-1">
-                          {members.length} joueur{members.length > 1 ? 's' : ''}
-                        </span>
-                      </button>
-                    );
-                  })}
-                </div>
-
-                {!currentPlayer?.teamId && (
-                  <p className="text-[11px] text-zinc-500 dark:text-zinc-400 italic">
-                    💡 Si vous ne choisissez pas d&apos;équipe, vous serez assigné automatiquement.
-                  </p>
-                )}
-              </div>
-            )}
+            {teamSelector}
 
             <div className="w-full bg-zinc-50 dark:bg-zinc-800/50 p-4 rounded-lg border border-zinc-200 dark:border-zinc-700/50 flex flex-col gap-3">
               <div className="flex items-center justify-between text-xs font-semibold text-zinc-500 dark:text-zinc-400">
@@ -1058,23 +1087,23 @@ export default function PlayPage() {
                 Partie terminée !
               </h2>
               <p className="text-sm text-zinc-500 dark:text-zinc-400 mt-1">
-                Votre score final : {currentPlayer?.score ?? 0} pts
-                {gameMode === GameMode.TEAM && currentTeam && (
+                Votre score final : {finalPlayer?.score ?? 0} pts
+                {results.gameMode === GameMode.TEAM && finalTeam && (
                   <span className="ml-2 font-bold text-indigo-600 dark:text-indigo-400">
-                    • {currentTeam.name} : {currentTeam.score || 0} pts
+                    • {finalTeam.name} : {finalTeam.score || 0} pts
                   </span>
                 )}
               </p>
             </div>
 
             {/* Podium Équipes si Mode Équipe */}
-            {gameMode === GameMode.TEAM && (
+            {results.gameMode === GameMode.TEAM && (
               <div className="w-full flex flex-col gap-2">
                 <h3 className="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 text-left">
                   Podium des équipes
                 </h3>
                 <ul className="flex flex-col gap-2 w-full">
-                  {[...teams]
+                  {[...results.teams]
                     .sort((a, b) => (b.score || 0) - (a.score || 0))
                     .map((team, idx) => {
                       const isMyTeam = currentPlayer?.teamId === team.id;
@@ -1114,20 +1143,20 @@ export default function PlayPage() {
 
             <div className="w-full flex flex-col gap-2">
               <h3 className="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 text-left">
-                {gameMode === GameMode.TEAM ? 'Classement individuel' : 'Classement final'}
+                {results.gameMode === GameMode.TEAM ? 'Classement individuel' : 'Classement final'}
               </h3>
               <ul className="flex flex-col gap-2 w-full">
-                {[...players]
+                {[...results.players]
                   .sort((a, b) => (b.score || 0) - (a.score || 0))
                   .map((p, idx) => {
                     const isMe =
                       p.id === clientId || (playerName && p.name === playerName);
-                    const pTeam = teams.find((t) => t.id === p.teamId);
+                    const pTeam = results.teams.find((t) => t.id === p.teamId);
                     return (
                       <li
                         key={p.id}
                         className={`flex items-center justify-between p-3 rounded-lg border ${
-                          idx === 0 && gameMode === GameMode.SOLO
+                          idx === 0 && results.gameMode === GameMode.SOLO
                             ? 'bg-amber-50 dark:bg-amber-950/30 border-amber-300 dark:border-amber-800'
                             : isMe
                             ? 'bg-indigo-50 dark:bg-indigo-950/40 border-indigo-300 dark:border-indigo-800'
@@ -1138,7 +1167,7 @@ export default function PlayPage() {
                           <span className="font-bold text-sm text-zinc-500 w-4 shrink-0">
                             {idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : `${idx + 1}.`}
                           </span>
-                          {gameMode === GameMode.TEAM && pTeam && (
+                          {results.gameMode === GameMode.TEAM && pTeam && (
                             <span
                               className="w-2.5 h-2.5 rounded-full shrink-0"
                               style={{ backgroundColor: pTeam.color }}
@@ -1163,6 +1192,17 @@ export default function PlayPage() {
                   })}
               </ul>
             </div>
+
+            {/* Configuration de la prochaine partie */}
+            <div className="w-full bg-zinc-50 dark:bg-zinc-800/50 p-4 rounded-lg border border-zinc-200 dark:border-zinc-700/50 flex items-center justify-between gap-3 text-xs font-semibold text-zinc-500 dark:text-zinc-400">
+              <span className="uppercase tracking-wider">Prochaine partie</span>
+              <span className="text-indigo-600 dark:text-indigo-400 font-bold text-right">
+                {gameMode === GameMode.TEAM ? `Mode Équipe (${teams.length} éq.)` : 'Mode Solo'} • {totalRounds || 5} manches
+                {artistBonusEnabled ? ' • Bonus artiste' : ''}
+              </span>
+            </div>
+
+            {teamSelector}
 
             <p className="text-xs text-zinc-500 dark:text-zinc-400 italic">
               En attente que l&apos;hôte relance une nouvelle partie...

@@ -140,13 +140,52 @@ describe('GameService', () => {
       expect(game.totalRounds).toBe(5);
     });
 
-    it('should reject updates if game is not in LOBBY state', () => {
+    it('should reject updates while the game is running', () => {
+      for (const state of [GameState.COUNTDOWN, GameState.PLAYING, GameState.RESULTS]) {
+        const code = sessionManager.createGame('master-1');
+        const game = sessionManager.getGame(code)!;
+        game.state = state;
+
+        const result = service.updateRoomSettings(code, { totalRounds: 10 }, 'master-1');
+        expect(result).toBeNull();
+        expect(game.totalRounds).toBe(5);
+      }
+    });
+
+    it('should allow master to change settings once the game is finished', () => {
       const code = sessionManager.createGame('master-1');
       const game = sessionManager.getGame(code)!;
-      game.state = GameState.PLAYING;
+      game.state = GameState.FINISHED;
 
-      const result = service.updateRoomSettings(code, { totalRounds: 10 }, 'master-1');
-      expect(result).toBeNull();
+      const result = service.updateRoomSettings(
+        code,
+        { totalRounds: 10, gameMode: GameMode.TEAM, artistBonusEnabled: true },
+        'master-1',
+      );
+
+      expect(result).not.toBeNull();
+      expect(game.totalRounds).toBe(10);
+      expect(game.gameMode).toBe(GameMode.TEAM);
+      expect(game.artistBonusEnabled).toBe(true);
+    });
+
+    it('should keep final scores until the next game is launched', () => {
+      const code = sessionManager.createGame('master-1');
+      const game = sessionManager.getGame(code)!;
+      game.players = [{ id: 'p1', name: 'Alex', score: 240 }];
+      game.state = GameState.FINISHED;
+
+      service.updateRoomSettings(code, { totalRounds: 8 }, 'master-1');
+
+      expect(game.players[0].score).toBe(240);
+    });
+
+    it('should still reject non-master updates once the game is finished', () => {
+      const code = sessionManager.createGame('master-1');
+      const game = sessionManager.getGame(code)!;
+      game.state = GameState.FINISHED;
+
+      expect(service.updateRoomSettings(code, { totalRounds: 10 }, 'p1')).toBeNull();
       expect(game.totalRounds).toBe(5);
     });
   });
@@ -192,6 +231,20 @@ describe('GameService', () => {
       const updatedP2 = service.selectTeam(code, 'p2', 'team-blue');
       expect(updatedP2).not.toBeNull();
       expect(updatedP2?.teamId).toBe('team-blue');
+    });
+
+    it('should allow players to change team once the game is finished, but not while playing', () => {
+      const code = sessionManager.createGame('master-1');
+      const game = sessionManager.getGame(code)!;
+      game.gameMode = GameMode.TEAM;
+      game.teams = DEFAULT_TEAMS.slice(0, 2);
+      sessionManager.addPlayer(code, { id: 'p1', name: 'Alex', score: 0 });
+
+      game.state = GameState.PLAYING;
+      expect(service.selectTeam(code, 'p1', 'team-red')).toBeNull();
+
+      game.state = GameState.FINISHED;
+      expect(service.selectTeam(code, 'p1', 'team-red')?.teamId).toBe('team-red');
     });
 
     it('should auto-assign unassigned players when game starts in team mode', () => {

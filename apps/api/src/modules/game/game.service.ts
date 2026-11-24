@@ -54,6 +54,14 @@ export class GameService {
     return this.gameSessionManager.getGame(code);
   }
 
+  /**
+   * La configuration du salon (reglages, equipes) est modifiable dans le lobby
+   * et une fois la partie terminee, avant de relancer une nouvelle partie.
+   */
+  canEditRoom(game: GameSession): boolean {
+    return game.state === GameState.LOBBY || game.state === GameState.FINISHED;
+  }
+
   updateRoomSettings(
     code: string,
     settings: {
@@ -71,7 +79,7 @@ export class GameService {
     if (game.masterId !== clientId) {
       return null;
     }
-    if (game.state !== GameState.LOBBY) {
+    if (!this.canEditRoom(game)) {
       return null;
     }
 
@@ -93,7 +101,7 @@ export class GameService {
 
   selectTeam(code: string, playerId: string, teamId: string | null): Player | null {
     const game = this.gameSessionManager.getGame(code);
-    if (!game || game.state !== GameState.LOBBY) {
+    if (!game || !this.canEditRoom(game)) {
       return null;
     }
     const success = game.assignPlayerToTeam(playerId, teamId);

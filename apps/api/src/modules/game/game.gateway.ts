@@ -240,7 +240,7 @@ export class GameGateway
     if (game.masterId !== clientId) {
       return this.fail(client, "NOT_HOST", "Seul l'hôte peut modifier le salon.", ClientEvents.UPDATE_SETTINGS);
     }
-    if (game.state !== GameState.LOBBY) {
+    if (!this.gameService.canEditRoom(game)) {
       return this.fail(client, "GAME_ALREADY_STARTED", "La partie a déjà commencé.", ClientEvents.UPDATE_SETTINGS);
     }
 
