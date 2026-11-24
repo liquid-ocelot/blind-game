@@ -8,6 +8,18 @@ import { ClientEvents, ServerEvents, GameMode, Team, DEFAULT_TEAMS, GameSyncPayl
 import { getApiUrl } from "@/lib/socket";
 import JoinQrCode from "@/app/components/JoinQrCode";
 
+/** Durée max d'une manche : 30 s de jeu + 7,5 s de résultats + 3 s de transition. */
+const APPROX_SECONDS_PER_ROUND = 40.5;
+
+function formatApproxDuration(rounds: number): string {
+  const totalSeconds = Math.round((rounds || 5) * APPROX_SECONDS_PER_ROUND);
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  if (minutes === 0) return `${seconds} s`;
+  if (seconds === 0) return `${minutes} min`;
+  return `${minutes} min ${String(seconds).padStart(2, '0')}`;
+}
+
 export interface MusicTrack {
   id: string;
   filename: string;
@@ -1317,6 +1329,14 @@ export default function RoomPage() {
                   </div>
                   <span className="text-xs text-zinc-400">Max : 20 manches</span>
                 </div>
+
+                <p className="text-xs text-zinc-500 dark:text-zinc-400">
+                  Durée estimée :{' '}
+                  <span className="font-semibold text-zinc-700 dark:text-zinc-200">
+                    environ {formatApproxDuration(totalRounds || 5)}
+                  </span>
+                  <span className="text-zinc-400"> · si chaque manche va jusqu&apos;au bout</span>
+                </p>
               </div>
             )}
           </div>
